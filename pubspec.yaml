@@ -1,0 +1,6 @@
+name: house_of_rooves_daemon
+description: The local deamon to manage my various home automation systems.
+dependencies:
+  home_automation_tools:
+    git: git://github.com/Hixie/dart-home-automation-tools.git
+  stack_trace: any
