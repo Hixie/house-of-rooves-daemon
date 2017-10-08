@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
-import 'package:dart-home-automation-tools/lib/all.dart';
+import 'package:home_automation_tools/all.dart';
 
 typedef void SolarLog(String message);
 
@@ -9,10 +9,10 @@ class SolarModel {
   SolarModel(this.cloud, this.monitor, this.remy, String solarId, { this.onLog }) {
     _log('connecting to solar display cloudbit ($solarId)');
     _cloudbit = cloud.getDevice(solarId);
+    _motionStream = new AlwaysOnWatchStream<bool>();
     _subscriptions.add(_cloudbit.values.listen(_motionSensor));
     // _subscriptions.add(_cloudbit.values.listen(getAverageValueLogger(log: _log, name: 'family room solar display', slop: 255.0, reportingThreshold: 10.0)));
     _subscriptions.add(monitor.power.listen(_power));
-    _motionStream = new AlwaysOnWatchStream<bool>();
     _subscriptions.add(motionStream.listen(_motionRemyProxy));
     _updater = new Timer.periodic(refreshPeriod, _updateDisplay);
     _log('model initialised');
@@ -24,7 +24,7 @@ class SolarModel {
   final SolarLog onLog;
 
   static const Duration refreshPeriod = const Duration(seconds: 15); // cannot be more than half of 30 seconds (the max time to send to cloudbit)
-  static const Duration motionIdleDuration = const Duration(minutes: 5);
+  static const Duration motionIdleDuration = const Duration(minutes: 15);
   static const Duration remyUpdatePeriod = const Duration(minutes: 60);
 
   WatchStream<bool> get motionStream => _motionStream;

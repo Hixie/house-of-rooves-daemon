@@ -3,10 +3,9 @@
 packages:
   home_automation_tools:
     description:
-      ref: HEAD
-      resolved-ref: "50402018a5c29021f61d601fc853b061b20355ca"
-      url: "git://github.com/Hixie/dart-home-automation-tools.git"
-    source: git
+      path: "../dart-home-automation-tools"
+      relative: true
+    source: path
     version: "0.0.0"
   meta:
     description:
@@ -25,6 +24,6 @@ packages:
       name: stack_trace
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "1.7.0"
+    version: "1.7.1"
 sdks:
   dart: ">=1.14.0 <2.0.0"
