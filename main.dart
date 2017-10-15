@@ -7,7 +7,9 @@ import 'house_sensors.dart';
 import 'laundry.dart';
 import 'shower_day.dart';
 //import 'solar.dart';
+import 'air_quality.dart';
 import 'google_home.dart';
+import 'television_model.dart';
 
 const String houseSensorsId = '243c201de435';
 const String laundryId = '00e04c02bd93';
@@ -21,19 +23,40 @@ void log(String module, String s) {
   print('$timestamp $module: $s');
 }
 
+class Credentials {
+  Credentials(String filename) : this._lines = new File(filename).readAsLinesSync() {
+    if (_lines.length < _requiredCount)
+      throw new Exception('credentials file incomplete or otherwise corrupted');
+  }
+  final List<String> _lines;
+
+  String get littleBitsToken => _lines[0];
+  String get sunPowerCustomerId => _lines[1];
+  String get remyPassword => _lines[2];
+  String get tvHost => _lines[3];
+  String get tvUsername => _lines[4];
+  String get tvPassword => _lines[5];
+  String get ttsHost => _lines[6];
+  String get ttsPassword => _lines[7];
+  String get airNowApiKey => _lines[8];
+
+  int get _requiredCount => 9;
+}
+
 Future<Null> main() async {
   try {
     log('system', 'house of rooves deamon initialising...');
-    List<String> credentials = new File('credentials.cfg').readAsLinesSync();
-    if (credentials.length < 5)
-      throw new Exception('credentials file incomplete or otherwise corrupted');
+
+    // SUPPORTING SERVICES
+
+    Credentials credentials = new Credentials('credentials.cfg');
     RemyMultiplexer remy = new RemyMultiplexer(
       'automatic-tools-2',
-      credentials[2],
+      credentials.remyPassword,
       onLog: (String message) { log('remy', message); },
     );
     LittleBitsCloud cloud = new LittleBitsCloud(
-      authToken: credentials[0],
+      authToken: credentials.littleBitsToken,
       onIdentify: (String deviceId) {
         if (deviceId == houseSensorsId)
           return 'house sensors';
@@ -57,24 +80,47 @@ Future<Null> main() async {
       },
     );
     // SunPowerMonitor solar = new SunPowerMonitor(
-    //   customerId: credentials[1],
+    //   customerId: credentials.sunPowerCustomerId,
     //   onError: (dynamic error) {
     //     log('sunpower', '$error');
     //   },
     // );
+    AirQualityMonitor airQuality = new AirQualityMonitor(
+      apiKey: credentials.airNowApiKey,
+      area: new GeoBox(-122.291453,37.306551, -121.946757,37.513806),
+//      onError: (String message) { log('airnowapi', message); },
+    );
+    TextToSpeechServer tts = new TextToSpeechServer(
+      host: credentials.ttsHost,
+      password: credentials.ttsPassword,
+    );
+    Television tv = new Television(
+      host: (await InternetAddress.lookup(credentials.tvHost)).first,
+      username: credentials.tvUsername,
+      password: credentials.tvPassword,
+    );
     await remy.ready;
+
+    // TODO:
+    //  - One Wire temperature sensor
+
+
+    // MODELS
+
     new LaundryRoomModel(
       cloud,
       remy,
       laundryId,
       onLog: (String message) { log('laundry', message); },
     );
+
     new HouseSensorsModel(
       cloud,
       remy,
       houseSensorsId,
       onLog: (String message) { log('house sensors', message); },
     );
+
     // new SolarModel(
     //   cloud,
     //   solar,
@@ -82,6 +128,12 @@ Future<Null> main() async {
     //   solarDisplayId,
     //   onLog: (String message) { log('solar', message); },
     // );
+
+    new AirQualityModel(
+      airQuality,
+      remy,
+      onLog: (String message) { log('air quality', message); },
+    );
 
     new ShowerDayModel(
       cloud,
@@ -95,12 +147,20 @@ Future<Null> main() async {
       onLog: (String message) { log('home', message); },
     );
 
-    // The next step is a TV multiplexer that exposes a useful subset of the TV API,
-    // as well as a display abstraction so that multiple messages can be displayed at once.
-    //
-    // Think about how the dishwasher might be connected to this.
+    new TelevisionModel(
+      tv,
+      remy,
+      onLog: (String message) { log('tv', message); },
+    );
+
+    // TODO:
+    //  - Remy status reporter
+    //     - display messages on the TV
+    //     - play audio icon
+    //     - verbalize messages using the TTS server
 
     log('system', 'house of rooves deamon online');
+
   } catch (error, stack) {
     log('system', '$error\n$stack');
   }

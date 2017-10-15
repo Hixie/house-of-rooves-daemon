@@ -3,7 +3,7 @@ import 'dart:collection';
 
 import 'package:home_automation_tools/all.dart';
 
-typedef void SolarLog(String message);
+import 'common.dart';
 
 class SolarModel {
   SolarModel(this.cloud, this.monitor, this.remy, String solarId, { this.onLog }) {
@@ -21,7 +21,7 @@ class SolarModel {
   final LittleBitsCloud cloud;
   final SunPowerMonitor monitor;
   final RemyMultiplexer remy;
-  final SolarLog onLog;
+  final LogCallback onLog;
 
   static const Duration refreshPeriod = const Duration(seconds: 15); // cannot be more than half of 30 seconds (the max time to send to cloudbit)
   static const Duration motionIdleDuration = const Duration(minutes: 15);

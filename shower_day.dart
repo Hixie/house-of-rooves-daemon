@@ -64,7 +64,7 @@ class ShowerDayModel {
   }
 
   void _updateCloudbit() {
-    _log('sending status to shower day display - ${_showerDayStatus ? 'green' : 'red'}');
+    _log('sending status to shower day display - ${_showerDayStatus ? 'green (needs shower)' : 'red (no shower needed)'}');
     _cloudbit.setValue(_showerDayStatus ? 1023 : 0);
   }
 

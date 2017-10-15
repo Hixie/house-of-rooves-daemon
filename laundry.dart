@@ -3,7 +3,7 @@ import 'dart:collection';
 
 import 'package:home_automation_tools/all.dart';
 
-typedef void LaundryRoomLog(String message);
+import 'common.dart';
 
 class LaundryRoomModel {
   LaundryRoomModel(this.cloud, this.remy, String laundryId, { this.onLog }) {
@@ -30,7 +30,7 @@ class LaundryRoomModel {
 
   final LittleBitsCloud cloud;
   final RemyMultiplexer remy;
-  final LaundryRoomLog onLog;
+  final LogCallback onLog;
 
   CloudBit _cloudbit;
   StreamSubscription<bool> _bit1Subscription;
