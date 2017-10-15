@@ -3,13 +3,13 @@ import 'dart:io';
 
 import 'package:home_automation_tools/all.dart';
 
-import 'house_sensors.dart';
-import 'laundry.dart';
-import 'shower_day.dart';
-//import 'solar.dart';
-import 'air_quality.dart';
-import 'google_home.dart';
-import 'television_model.dart';
+import 'src/house_sensors.dart';
+import 'src/laundry.dart';
+import 'src/shower_day.dart';
+//import 'src/solar.dart';
+import 'src/air_quality.dart';
+import 'src/google_home.dart';
+import 'src/television_model.dart';
 
 const String houseSensorsId = '243c201de435';
 const String laundryId = '00e04c02bd93';
