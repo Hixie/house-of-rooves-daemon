@@ -3,17 +3,18 @@ import 'dart:collection';
 
 import 'package:home_automation_tools/all.dart';
 
-class GoogleHomeModel {
-  GoogleHomeModel(this.remy, { this.onLog }) {
+import 'common.dart';
+
+class GoogleHomeModel extends Model {
+  GoogleHomeModel(this.remy, { LogCallback onLog }) : super(onLog: onLog) {
     _subscriptions.add(remy.getStreamForNotification('medication-taken').listen(_handleRemyMedicationTakenState));
     _subscriptions.add(remy.getStreamForNotification('want-medication-morning').listen(_handleRemyWantMedicationMorning));
     _subscriptions.add(remy.getStreamForNotification('want-medication-afternoon').listen(_handleRemyWantMedicationAfternoon));
     _subscriptions.add(remy.getStreamForNotification('want-medication-evening').listen(_handleRemyWantMedicationEvening));
-    _log('model initialised');
+    log('model initialised');
   }
 
   final RemyMultiplexer remy;
-  final Logger onLog;
 
   Set<StreamSubscription<dynamic>> _subscriptions = new HashSet<StreamSubscription<dynamic>>();
 
@@ -25,7 +26,7 @@ class GoogleHomeModel {
   bool _morning = false;
 
   void _handleRemyWantMedicationMorning(bool state) {
-    _log('received remy status change - ${state == null ? 'unknown' : state ? 'morning medication needed' : 'no need for morning medication'}');
+    log('received remy status change - ${state == null ? 'unknown' : state ? 'morning medication needed' : 'no need for morning medication'}');
     _morning = state;
     _check();
   }
@@ -33,7 +34,7 @@ class GoogleHomeModel {
   bool _afternoon = false;
 
   void _handleRemyWantMedicationAfternoon(bool state) {
-    _log('received remy status change - ${state == null ? 'unknown' : state ? 'afternoon medication needed' : 'no need for afternoon medication'}');
+    log('received remy status change - ${state == null ? 'unknown' : state ? 'afternoon medication needed' : 'no need for afternoon medication'}');
     _afternoon = state;
     _check();
   }
@@ -41,7 +42,7 @@ class GoogleHomeModel {
   bool _evening = false;
 
   void _handleRemyWantMedicationEvening(bool state) {
-    _log('received remy status change - ${state == null ? 'unknown' : state ? 'evening medication needed' : 'no need for evening medication'}');
+    log('received remy status change - ${state == null ? 'unknown' : state ? 'evening medication needed' : 'no need for evening medication'}');
     _evening = state;
     _check();
   }
@@ -49,7 +50,7 @@ class GoogleHomeModel {
   bool _pending;
 
   void _handleRemyMedicationTakenState(bool state) {
-    _log('received remy status change - ${state == null ? 'unknown' : state ? 'medication taken notification pending' : 'no pending notification'}');
+    log('received remy status change - ${state == null ? 'unknown' : state ? 'medication taken notification pending' : 'no pending notification'}');
     _pending = state;
     _check();
   }
@@ -69,13 +70,8 @@ class GoogleHomeModel {
       } else if (_evening) {
         remy.pushButtonById('tookMedicationEvening');
       } else {
-        _log('not clear what medication we are talking about here');
+        log('not clear what medication we are talking about here');
       }
     }
-  }
-
-  void _log(String message) {
-    if (onLog != null)
-      onLog(message);
   }
 }

@@ -4,8 +4,10 @@ import 'dart:typed_data';
 
 import 'package:home_automation_tools/all.dart';
 
-class TelevisionModel {
-  TelevisionModel(this.tv, this.remy, { this.onLog }) {
+import 'common.dart';
+
+class TelevisionModel extends Model {
+  TelevisionModel(this.tv, this.remy, { LogCallback onLog }) : super(onLog: onLog) {
     _identify();
     _updateStatus();
     _subscriptions.add(remy.getStreamForNotification('tv-on').listen(_handleRemyTvOn));
@@ -14,12 +16,11 @@ class TelevisionModel {
     _subscriptions.add(remy.getStreamForNotificationWithArgument('tv-on-input').listen(_handleRemyTvOnAndSwitchInput));
     _subscriptions.add(remy.getStreamForNotificationWithArgument('wake-on-lan').listen(_handleRemyWakeOnLan));
     _subscriptions.add(tv.connected.listen(_connected));
-    _log('model initialised');
+    log('model initialised');
   }
 
   final Television tv;
   final RemyMultiplexer remy;
-  final Logger onLog;
 
   Set<StreamSubscription<dynamic>> _subscriptions = new HashSet<StreamSubscription<dynamic>>();
 
@@ -35,9 +36,9 @@ class TelevisionModel {
       String model = await tv.model;
       String version = await tv.softwareVersion;
       if (name != null || model != null || version != null)
-        _log('connected to TV named "$name", model $model, software version $version');
+        log('connected to TV named "$name", model $model, software version $version');
     } catch (error) {
-      _log('failed to connect to TV: $error');
+      log('failed to connect to TV: $error');
     }
   }
 
@@ -116,7 +117,7 @@ class TelevisionModel {
         _lastInputStatus = input;
       }
     } on TelevisionException catch (error) {
-      _log('unexpected response when updating television status: $error');
+      log('unexpected response when updating television status: $error');
     }
     _checking = false;
     _scheduleCheck(nextDelay);
@@ -141,11 +142,11 @@ class TelevisionModel {
     if (!value)
       return;
     try {
-      _log('turning the tv on');
+      log('turning the tv on');
       await tv.setPower(true);
       _scheduleCheck(const Duration(milliseconds: 10));
     } on TelevisionException catch (error) {
-      _log('unexpected response when switching television on: $error');
+      log('unexpected response when switching television on: $error');
     } 
   }
   
@@ -153,11 +154,11 @@ class TelevisionModel {
     if (!value)
       return;
     try {
-      _log('powering off the tv');
+      log('powering off the tv');
       await tv.setPower(false);
       _scheduleCheck(const Duration(milliseconds: 10));
     } on TelevisionException catch (error) {
-      _log('unexpected response when switching television off: $error');
+      log('unexpected response when switching television off: $error');
     } 
   }
   
@@ -185,14 +186,14 @@ class TelevisionModel {
             break;
         }
         assert(source != null);
-        _log('switching to input $value');
+        log('switching to input $value');
         await tv.setInput(new TelevisionChannel.fromSource(source));
         _scheduleCheck(const Duration(milliseconds: 10));
       } on TelevisionException catch (error) {
-        _log('unexpected response when switching television channel: $error');
+        log('unexpected response when switching television channel: $error');
       } 
     } else {
-      _log('received invalid input request (with input "$value")');
+      log('received invalid input request (with input "$value")');
     }
   }
   
@@ -203,7 +204,7 @@ class TelevisionModel {
   
   Future<Null> _handleRemyWakeOnLan(String value) async {
     if (value.length != 12) {
-      _log('received invalid wake-on-lan request (with supposed MAC address "$value")');
+      log('received invalid wake-on-lan request (with supposed MAC address "$value")');
       return;
     }
     Uint8List macAddress = new Uint8List(6);
@@ -211,15 +212,10 @@ class TelevisionModel {
       for (int index = 0; index < macAddress.length; index += 1)
         macAddress[index] = int.parse(value.substring(index * 2, index * 2 + 2), radix: 16);
     } on FormatException {
-      _log('received invalid wake-on-lan request (with supposed MAC address "$value")');
+      log('received invalid wake-on-lan request (with supposed MAC address "$value")');
       return;
     }
-    _log('sending wake-on-lan packet to MAC address "$value"');
+    log('sending wake-on-lan packet to MAC address "$value"');
     await wakeOnLan(macAddress);
-  }
-
-  void _log(String message) {
-    if (onLog != null)
-      onLog(message);
   }
 }

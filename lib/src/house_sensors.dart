@@ -3,12 +3,14 @@ import 'dart:collection';
 
 import 'package:home_automation_tools/all.dart';
 
-class HouseSensorsModel {
-  HouseSensorsModel(this.cloud, this.remy, String houseSensorsId, { this.onLog }) {
-    _log('connecting to house sensors cloudbit ($houseSensorsId)');
+import 'common.dart';
+
+class HouseSensorsModel extends Model {
+  HouseSensorsModel(this.cloud, this.remy, String houseSensorsId, { LogCallback onLog }) : super(onLog: onLog) {
+    log('connecting to house sensors cloudbit ($houseSensorsId)');
     _cloudbit = cloud.getDevice(houseSensorsId);
     _subscriptions.add(_cloudbit.values.listen((int value) { _trackConnection(value != null); }));
-    // _subscriptions.add(_cloudbit.values.listen(getAverageValueLogger(log: _log, name: 'house sensors', slop: 30.0, reportingThreshold: 1.0)));
+    // _subscriptions.add(_cloudbit.values.listen(getAverageValueLogger(log: log, name: 'house sensors', slop: 30.0, reportingThreshold: 1.0)));
     BitDemultiplexer houseSensorsBits = new BitDemultiplexer(_cloudbit.values, 3);
     _frontDoor = houseSensorsBits[1].transform(debouncer(longDebounceDuration)).transform(inverter); // 10
     _garageDoor = houseSensorsBits[2].transform(debouncer(shortDebounceDuration)).transform(inverter); // 20
@@ -17,12 +19,11 @@ class HouseSensorsModel {
     _subscriptions.add(garageDoor.listen(_getDoorRemyProxy('garage', 'Garage')));
     _subscriptions.add(backDoor.listen(_getDoorRemyProxy('back', 'Back')));
     _timer = new Timer.periodic(updatePeriod, _updateOutput);
-    _log('model initialised');
+    log('model initialised');
   }
 
   final LittleBitsCloud cloud;
   final RemyMultiplexer remy;
-  final Logger onLog;
 
   static const Duration shortDebounceDuration = const Duration(milliseconds: 500);
   static const Duration longDebounceDuration = const Duration(milliseconds: 1500);
@@ -48,7 +49,7 @@ class HouseSensorsModel {
 
   StreamHandler<bool> _getDoorRemyProxy(String uiName, String remyName) {
     return (bool value) {
-      _log(value ? '$uiName door open' : '$uiName door closed');
+      log(value ? '$uiName door open' : '$uiName door closed');
       remy.pushButtonById('houseSensor${remyName}Door${value ? "Open" : "Closed"}');
     };
   }
@@ -66,10 +67,5 @@ class HouseSensorsModel {
     assert(timer != null);
     assert(timer == _timer);
     _cloudbit.setBooleanValue(_connected, silent: true);
-  }
-
-  void _log(String message) {
-    if (onLog != null)
-      onLog(message);
   }
 }

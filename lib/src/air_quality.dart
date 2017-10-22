@@ -6,15 +6,14 @@ import 'package:home_automation_tools/all.dart';
 
 import 'common.dart';
 
-class AirQualityModel {
-  AirQualityModel(this.dataSource, this.remy, { this.onLog }) {
+class AirQualityModel extends Model {
+  AirQualityModel(this.dataSource, this.remy, { LogCallback onLog }) : super(onLog: onLog) {
     _subscriptions.add(dataSource.value.listen(_handler));
-    _log('model initialised');
+    log('model initialised');
   }
 
   final AirQualityMonitor dataSource;
   final RemyMultiplexer remy;
-  final LogCallback onLog;
 
   Set<StreamSubscription<dynamic>> _subscriptions = new HashSet<StreamSubscription<dynamic>>();
 
@@ -26,7 +25,7 @@ class AirQualityModel {
   void _handler(AirQuality value) {
     if (value == null)
       return;
-    _log(value.toString());
+    log(value.toString());
     double maxAqi = 0.0;
     int count = 0;
     DateTime now = new DateTime.now();
@@ -39,10 +38,10 @@ class AirQualityModel {
       count += 1;
     }
     if (count == 0) {
-      _log('no recent data points available');
+      log('no recent data points available');
       remy.pushButtonById('airQualityUnknown');
     } else {
-      _log('collected $count data points with a maximum air quality index of $maxAqi');
+      log('collected $count data points with a maximum air quality index of $maxAqi');
       if (maxAqi < 70.0) {
         remy.pushButtonById('airQualityGood'); // We allow the range up to 70.0 because the Bay Area just has terrible air and we don't want to always show a warning.
       } else if (maxAqi < 100.0) {
@@ -55,10 +54,5 @@ class AirQualityModel {
         remy.pushButtonById('airQualityToxic3');
       }
     }
-  }
-
-  void _log(String message) {
-    if (onLog != null)
-      onLog(message);
   }
 }

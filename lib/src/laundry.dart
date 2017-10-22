@@ -5,11 +5,11 @@ import 'package:home_automation_tools/all.dart';
 
 import 'common.dart';
 
-class LaundryRoomModel {
-  LaundryRoomModel(this.cloud, this.remy, String laundryId, { this.onLog }) {
-    _log('connecting to laundry room cloudbit ($laundryId)');
+class LaundryRoomModel extends Model {
+  LaundryRoomModel(this.cloud, this.remy, String laundryId, { LogCallback onLog }) : super(onLog: onLog) {
+    log('connecting to laundry room cloudbit ($laundryId)');
     _cloudbit = cloud.getDevice(laundryId);
-    // _miscSubscriptions.add(_cloudbit.values.listen(getAverageValueLogger(log: _log, name: 'laundry', slop: 1023.0 * 2.0 / 99, reportingThreshold: 1.0)));
+    // _miscSubscriptions.add(_cloudbit.values.listen(getAverageValueLogger(log: log, name: 'laundry', slop: 1023.0 * 2.0 / 99, reportingThreshold: 1.0)));
     BitDemultiplexer laundryBits = new BitDemultiplexer(_cloudbit.values, 4);
     _bit1Subscription = laundryBits[1].transform(debouncer(const Duration(seconds: 5))).listen(_handleDoneLedBit); //  5 - Done
     _bit2Subscription = laundryBits[2].transform(debouncer(const Duration(seconds: 2))).listen(_handleSensingLedBit); // 10 - Sensing
@@ -18,19 +18,18 @@ class LaundryRoomModel {
     _miscSubscriptions.add(remy.getStreamForNotification('laundry-led-on').listen(_handleLed));
     _miscSubscriptions.add(remy.getStreamForNotification('laundry-dryer-full').listen(_handleDryerFull));
     if (remy.hasNotification('laundry-status-washer-on')) {
-      _log('restarting washer timer');
+      log('restarting washer timer');
       washerRunning = true;
     }
     if (remy.hasNotification('laundry-status-dryer-on')) {
-      _log('restarting dryer timer');
+      log('restarting dryer timer');
       dryerRunning = true;
     }
-    _log('model initialised');
+    log('model initialised');
   }
 
   final LittleBitsCloud cloud;
   final RemyMultiplexer remy;
-  final LogCallback onLog;
 
   CloudBit _cloudbit;
   StreamSubscription<bool> _bit1Subscription;
@@ -53,28 +52,28 @@ class LaundryRoomModel {
 
   void _handleDoneLedBit(bool value) { // washer done LED bit
     // This bit is inverted; true means it's off, false means its on.
-    _log(value ? 'detected washer done LED off' : 'detected washer done LED on');
+    log(value ? 'detected washer done LED off' : 'detected washer done LED on');
     if (value == false)
       washerRunning = false;
   }
 
   void _handleSensingLedBit(bool value) { // washer sensing LED bit
     // This bit is inverted; true means it's off, false means its on.
-    _log(value ? 'detected washer sensing LED off' : 'detected washer sensing LED on');
+    log(value ? 'detected washer sensing LED off' : 'detected washer sensing LED on');
     if (value == false)
       washerRunning = true;
   }
 
   void _handleButtonBit(bool value) { // button bit
     // True means it's being pressed.
-    _log(value ? 'detected button down' : 'detected button up');
+    log(value ? 'detected button down' : 'detected button up');
     if (value == true)
       _handleButtonPushed();
   }
 
   void _handleDryerBit(bool value) { // dryer knob bit
     // True means the knob is currently in an "on" cycle, false means it's in an "off" cycle.
-    _log(value ? 'detected dryer knob on cycle' : 'detected dryer knob off cycle');
+    log(value ? 'detected dryer knob on cycle' : 'detected dryer knob off cycle');
     dryerRunning = value;
   }
 
@@ -84,8 +83,8 @@ class LaundryRoomModel {
     if (led == null || led == _ledStatus)
       return;
     _ledStatus = led;
-    _log('received laundry-led-on notification change - ${led ? 'active' : 'now inactive'}');
-    _log('switching LED wire ${led ? 'on' : 'off'}');
+    log('received laundry-led-on notification change - ${led ? 'active' : 'now inactive'}');
+    log('switching LED wire ${led ? 'on' : 'off'}');
     _cloudbit.setValue(led ? 1023 : 0);
   }
 
@@ -97,16 +96,16 @@ class LaundryRoomModel {
     if (value) {
       _washerStopwatch.reset();
       _washerStopwatch.start();
-      _log('washer started');
+      log('washer started');
       remy.pushButtonById('laundryAutomaticWasherStarted');
       remy.pushButtonById('laundryAutomaticNone');
     } else {
       _washerStopwatch.stop();
       if (_washerStopwatch.elapsed >= _kMinWasherCycleDuration) {
-        _log('washer finished');
+        log('washer finished');
         remy.pushButtonById('laundryAutomaticWasherClean');
       } else {
-        _log('washer stopped early');
+        log('washer stopped early');
         remy.pushButtonById('laundryAutomaticWasherFull');
       }
     }
@@ -117,8 +116,8 @@ class LaundryRoomModel {
   void _handleDryerFull(bool value) {
     if (value == null)
       return;
-    _log('received notification change - laundry-dryer-full ${value ? 'active' : 'now inactive'}');
-    _log(value ? 'dryer must be full' : 'dryer must be empty');
+    log('received notification change - laundry-dryer-full ${value ? 'active' : 'now inactive'}');
+    log(value ? 'dryer must be full' : 'dryer must be empty');
     _dryerFull = value;
   }
 
@@ -130,7 +129,7 @@ class LaundryRoomModel {
     if (value) {
       _dryerStopwatch.reset();
       _dryerStopwatch.start();
-      _log('dryer started');
+      log('dryer started');
       if (dryerFull)
         remy.pushButtonById('laundryAutomaticCleanLaundryPending');
       if (!washerRunning)
@@ -139,33 +138,28 @@ class LaundryRoomModel {
     } else {
       _dryerStopwatch.stop();
       if (_dryerStopwatch.elapsed >= _kMinDryerCycleDuration) {
-        _log('dryer finished');
+        log('dryer finished');
         remy.pushButtonById('laundryAutomaticDryerClean');
       } else {
-        _log('dryer stopped early');
+        log('dryer stopped early');
         remy.pushButtonById('laundryAutomaticDryerFull');
       }
     }
   }
 
   void _handleButtonPushed() {
-    _log('button pushed');
+    log('button pushed');
     if (!washerRunning) {
       if (_ledStatus) {
-        _log('button pushed while washer idle and LED on; interpreting this as a notification that the washer is empty');
+        log('button pushed while washer idle and LED on; interpreting this as a notification that the washer is empty');
         remy.pushButtonById('laundryAutomaticWasherEmpty');
       } else {
-        _log('button pushed while washer idle and LED off; interpreting this as a notification that the washer has clean wet laundry');
+        log('button pushed while washer idle and LED off; interpreting this as a notification that the washer has clean wet laundry');
         remy.pushButtonById('laundryAutomaticWasherClean');
       }
     } else {
-      _log('button pushed while washer running; interpreting this as a notification that the washer finished');
+      log('button pushed while washer running; interpreting this as a notification that the washer finished');
       washerRunning = false;
     }
-  }
-
-  void _log(String message) {
-    if (onLog != null)
-      onLog(message);
   }
 }

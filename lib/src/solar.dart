@@ -5,23 +5,22 @@ import 'package:home_automation_tools/all.dart';
 
 import 'common.dart';
 
-class SolarModel {
-  SolarModel(this.cloud, this.monitor, this.remy, String solarId, { this.onLog }) {
-    _log('connecting to solar display cloudbit ($solarId)');
+class SolarModel extends Model {
+  SolarModel(this.cloud, this.monitor, this.remy, String solarId, { LogCallback onLog }) : super(onLog: onLog) {
+    log('connecting to solar display cloudbit ($solarId)');
     _cloudbit = cloud.getDevice(solarId);
     _motionStream = new AlwaysOnWatchStream<bool>();
     _subscriptions.add(_cloudbit.values.listen(_motionSensor));
-    // _subscriptions.add(_cloudbit.values.listen(getAverageValueLogger(log: _log, name: 'family room solar display', slop: 255.0, reportingThreshold: 10.0)));
+    // _subscriptions.add(_cloudbit.values.listen(getAverageValueLogger(log: log, name: 'family room solar display', slop: 255.0, reportingThreshold: 10.0)));
     _subscriptions.add(monitor.power.listen(_power));
     _subscriptions.add(motionStream.listen(_motionRemyProxy));
     _updater = new Timer.periodic(refreshPeriod, _updateDisplay);
-    _log('model initialised');
+    log('model initialised');
   }
 
   final LittleBitsCloud cloud;
   final SunPowerMonitor monitor;
   final RemyMultiplexer remy;
-  final LogCallback onLog;
 
   static const Duration refreshPeriod = const Duration(seconds: 15); // cannot be more than half of 30 seconds (the max time to send to cloudbit)
   static const Duration motionIdleDuration = const Duration(minutes: 15);
@@ -49,7 +48,7 @@ class SolarModel {
       return;
     double newValue = (value * 10.0).round() / 10.0;
     if (newValue != _lastPower) {
-      _log('solar power ${value.toStringAsFixed(1)}kW');
+      log('solar power ${value.toStringAsFixed(1)}kW');
       _lastPower = newValue;
       _updateDisplay(_updater);
     }
@@ -82,7 +81,7 @@ class SolarModel {
     final bool lastConnected = _motionSensorConnected;
     _motionSensorConnected = value != null;
     if (_motionSensorConnected != lastConnected)
-      _log('${_motionSensorConnected ? 'connected to' : 'disconnected from'} family room solar display cloudbit');
+      log('${_motionSensorConnected ? 'connected to' : 'disconnected from'} family room solar display cloudbit');
     if (value == null) {
       _motionStoppedTimer?.cancel();
       _motionStoppedTimer = null;
@@ -110,16 +109,11 @@ class SolarModel {
     if (value == null)
       return;
     if (value) {
-      _log('room is occupied');
+      log('room is occupied');
       remy.pushButtonById('houseSensorFamilyRoomOccupied');
     } else {
-      _log('no motion detected');
+      log('no motion detected');
       remy.pushButtonById('houseSensorFamilyRoomIdle');
     }
-  }
-
-  void _log(String message) {
-    if (onLog != null)
-      onLog(message);
   }
 }
