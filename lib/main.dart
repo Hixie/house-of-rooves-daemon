@@ -3,12 +3,14 @@ import 'dart:io';
 
 import 'package:home_automation_tools/all.dart';
 
-import 'src/house_sensors.dart';
-import 'src/laundry.dart';
-import 'src/shower_day.dart';
-//import 'src/solar.dart';
 import 'src/air_quality.dart';
 import 'src/google_home.dart';
+import 'src/house_sensors.dart';
+import 'src/laundry.dart';
+import 'src/message_center.dart';
+import 'src/remy_messages_model.dart';
+import 'src/shower_day.dart';
+//import 'src/solar.dart';
 import 'src/television_model.dart';
 
 const String houseSensorsId = '243c201de435';
@@ -99,6 +101,7 @@ Future<Null> main() async {
       username: credentials.tvUsername,
       password: credentials.tvPassword,
     );
+    MessageCenter messageCenter = new MessageCenter(tv, tts);
     await remy.ready;
 
     // TODO:
@@ -151,6 +154,12 @@ Future<Null> main() async {
       tv,
       remy,
       onLog: (String message) { log('tv', message); },
+    );
+
+    new RemyMessagesModel(
+      messageCenter,
+      remy,
+      onLog: (String message) { log('remy messages', message); },
     );
 
     // TODO:

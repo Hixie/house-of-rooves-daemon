@@ -11,8 +11,8 @@ class LaundryRoomModel extends Model {
     _cloudbit = cloud.getDevice(laundryId);
     // _miscSubscriptions.add(_cloudbit.values.listen(getAverageValueLogger(log: log, name: 'laundry', slop: 1023.0 * 2.0 / 99, reportingThreshold: 1.0)));
     BitDemultiplexer laundryBits = new BitDemultiplexer(_cloudbit.values, 4);
-    _bit1Subscription = laundryBits[1].transform(debouncer(const Duration(seconds: 5))).listen(_handleDoneLedBit); //  5 - Done
-    _bit2Subscription = laundryBits[2].transform(debouncer(const Duration(seconds: 2))).listen(_handleSensingLedBit); // 10 - Sensing
+    _bit2Subscription = laundryBits[1].transform(debouncer(const Duration(seconds: 2))).listen(_handleSensingLedBit); // 5 - Sensing
+    _bit1Subscription = laundryBits[2].transform(debouncer(const Duration(seconds: 5))).listen(_handleDoneLedBit); //  10 - Done
     _bit3Subscription = laundryBits[3].transform(debouncer(const Duration(milliseconds: 200))).listen(_handleButtonBit); // 20 - Button
     _bit4Subscription = laundryBits[4].transform(debouncer(const Duration(seconds: 2))).listen(_handleDryerBit); // 40 - Dryer
     _miscSubscriptions.add(remy.getStreamForNotification('laundry-led-on').listen(_handleLed));
@@ -50,18 +50,18 @@ class LaundryRoomModel extends Model {
       subscription.cancel();
   }
 
-  void _handleDoneLedBit(bool value) { // washer done LED bit
-    // This bit is inverted; true means it's off, false means its on.
-    log(value ? 'detected washer done LED off' : 'detected washer done LED on');
-    if (value == false)
-      washerRunning = false;
-  }
-
   void _handleSensingLedBit(bool value) { // washer sensing LED bit
     // This bit is inverted; true means it's off, false means its on.
     log(value ? 'detected washer sensing LED off' : 'detected washer sensing LED on');
     if (value == false)
       washerRunning = true;
+  }
+
+  void _handleDoneLedBit(bool value) { // washer done LED bit
+    // This bit is inverted; true means it's off, false means its on.
+    log(value ? 'detected washer done LED off' : 'detected washer done LED on');
+    if (value == false)
+      washerRunning = false;
   }
 
   void _handleButtonBit(bool value) { // button bit
