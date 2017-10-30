@@ -37,7 +37,7 @@ class TelevisionModel extends Model {
       String version = await tv.softwareVersion;
       if (name != null || model != null || version != null)
         log('connected to TV named "$name", model $model, software version $version');
-    } catch (error) {
+    } on TelevisionException catch (error) {
       log('failed to connect to TV: $error');
     }
   }

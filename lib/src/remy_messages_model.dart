@@ -24,6 +24,8 @@ class RemyMessagesModel extends Model {
   }
 
   void _handleNotifications(RemyNotification notification) {
+    if (notification.classes.contains('automatic'))
+      return;
     log('announcing "${notification.label}" (escalation level ${notification.escalationLevel})');
     String label;
     switch (notification.escalationLevel) {

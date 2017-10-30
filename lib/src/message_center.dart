@@ -151,6 +151,9 @@ class MessageCenter extends Model {
     return result;
   }
 
+  int _lastAuditoryIconLevel = 0;
+  DateTime _lastAuditoryIconTimeStamp = new DateTime.now();
+
   bool _active = true;
   Future<Null> _lastInLine = new Future<Null>.value(null);
   Future<Null> announce(String message, int level, { bool verbal: true, bool auditoryIcon: true, bool visual: true }) async {
@@ -163,8 +166,14 @@ class MessageCenter extends Model {
     StringMessage visualHandle;
     if (visual)
       visualHandle = showMessage(message);
-    if (auditoryIcon)
-      await tts.alarm(level);
+    if (auditoryIcon) {
+      DateTime now = new DateTime.now();
+      if (_lastAuditoryIconLevel < level || now.difference(_lastAuditoryIconTimeStamp) > const Duration(seconds: 20)) {
+        await tts.alarm(level);
+        _lastAuditoryIconTimeStamp = now;
+        _lastAuditoryIconLevel = level;
+      }
+    }
     if (!_active)
       return;
     if (verbal)
@@ -208,7 +217,10 @@ class MessageCenter extends Model {
     }
     String line = components.join(' | ');
     if (line.isNotEmpty || _cleanupScheduled) {
-      tv.showMessage(line);
+      tv.showMessage(line).catchError((dynamic error, StackTrace stack) {
+        assert(error is TelevisionException);
+        // TV is probably turned off or something.
+      });
       _updater = new Timer(const Duration(milliseconds: 2000), _update);
       _cleanupScheduled = false;
     }
