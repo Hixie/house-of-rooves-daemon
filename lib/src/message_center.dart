@@ -13,8 +13,6 @@ abstract class Message {
 
   String get message;
   
-  bool get announce => false;
-
   bool get requiresCleanup => false;
 
   @protected
@@ -156,7 +154,7 @@ class MessageCenter extends Model {
 
   bool _active = true;
   Future<Null> _lastInLine = new Future<Null>.value(null);
-  Future<Null> announce(String message, int level, { bool verbal: true, bool auditoryIcon: true, bool visual: true }) async {
+  Future<Null> announce(String message, int level, { bool verbal: true, bool auditoryIcon: true, bool visual: true, Duration duration: const Duration(seconds: 5) }) async {
     Completer<Null> completer = new Completer<Null>();
     Future<Null> previousInLine = _lastInLine;
     _lastInLine = completer.future;
@@ -166,6 +164,7 @@ class MessageCenter extends Model {
     StringMessage visualHandle;
     if (visual)
       visualHandle = showMessage(message);
+    Future<Null> timeout = new Future<Null>.delayed(duration);
     if (auditoryIcon) {
       DateTime now = new DateTime.now();
       if (_lastAuditoryIconLevel < level || now.difference(_lastAuditoryIconTimeStamp) > const Duration(seconds: 20)) {
@@ -178,6 +177,7 @@ class MessageCenter extends Model {
       return;
     if (verbal)
       await tts.speak(message);
+    await timeout;
     if (!_active)
       return;
     visualHandle?.hide();
