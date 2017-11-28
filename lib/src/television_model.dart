@@ -92,9 +92,12 @@ class TelevisionModel extends Model {
         case TelevisionSource.miracast:
         case TelevisionSource.bluetooth:
         case TelevisionSource.manual:
-        case TelevisionSource.unknown:
           power = true;
           input = 'Network';
+          break;
+        case TelevisionSource.unknown:
+          power = true;
+          nextDelay = const Duration(seconds: 2);
           break;
         case TelevisionSource.switching:
           power = true;
@@ -191,7 +194,7 @@ class TelevisionModel extends Model {
         _scheduleCheck(const Duration(milliseconds: 10));
       } on TelevisionException catch (error) {
         log('unexpected response when switching television channel: $error');
-      } 
+      }
     } else {
       log('received invalid input request (with input "$value")');
     }

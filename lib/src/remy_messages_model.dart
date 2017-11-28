@@ -23,7 +23,7 @@ class RemyMessagesModel extends Model {
       subscription.cancel();
   }
 
-  static const Duration didThatWindow = const Duration(seconds: 55);
+  static const Duration didThatWindow = const Duration(seconds: 125);
 
   RemyNotification _lastMessage;
   DateTime _lastMessageTimestamp;
@@ -70,9 +70,7 @@ class RemyMessagesModel extends Model {
           log('announcement for "${notification.label}" complete.');
       });
     }
-    if (verbal || visual)
-      _lastMessage = null;
-    if (verbal) {
+    if (verbal || visual) {
       _lastMessage = notification;
       _lastMessageTimestamp = new DateTime.now();
     }

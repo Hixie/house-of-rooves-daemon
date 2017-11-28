@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io';
 
 import 'package:home_automation_tools/all.dart';
 
@@ -9,9 +10,9 @@ class LaundryRoomModel extends Model {
   LaundryRoomModel(this.cloud, this.remy, String laundryId, { LogCallback onLog }) : super(onLog: onLog) {
     log('connecting to laundry room cloudbit ($laundryId)');
     _cloudbit = cloud.getDevice(laundryId);
-    // _miscSubscriptions.add(_cloudbit.values.listen(getAverageValueLogger(log: log, name: 'laundry', slop: 1023.0 * 2.0 / 99, reportingThreshold: 1.0)));
+    _miscSubscriptions.add(_cloudbit.values.listen(getRawValueDiskLogger(name: 'laundry', log: new File('logs/cloudbit.raw.log'))));
     BitDemultiplexer laundryBits = new BitDemultiplexer(_cloudbit.values, 4);
-    _bit2Subscription = laundryBits[1].transform(debouncer(const Duration(seconds: 2))).listen(_handleSensingLedBit); // 5 - Sensing
+    _bit2Subscription = laundryBits[1].transform(debouncer(const Duration(milliseconds: 200))).listen(_handleSensingLedBit); // 5 - Sensing
     _bit1Subscription = laundryBits[2].transform(debouncer(const Duration(seconds: 5))).listen(_handleDoneLedBit); //  10 - Done
     _bit3Subscription = laundryBits[3].transform(debouncer(const Duration(milliseconds: 200))).listen(_handleButtonBit); // 20 - Button
     _bit4Subscription = laundryBits[4].transform(debouncer(const Duration(seconds: 2))).listen(_handleDryerBit); // 40 - Dryer

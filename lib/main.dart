@@ -90,7 +90,7 @@ Future<Null> main() async {
     AirQualityMonitor airQuality = new AirQualityMonitor(
       apiKey: credentials.airNowApiKey,
       area: new GeoBox(-122.291453,37.306551, -121.946757,37.513806),
-//      onError: (String message) { log('airnowapi', message); },
+      onError: (String message) { log('airnowapi', message); },
     );
     TextToSpeechServer tts = new TextToSpeechServer(
       host: credentials.ttsHost,
@@ -120,6 +120,7 @@ Future<Null> main() async {
     new HouseSensorsModel(
       cloud,
       remy,
+      messageCenter,
       houseSensorsId,
       onLog: (String message) { log('house sensors', message); },
     );

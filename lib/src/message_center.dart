@@ -46,6 +46,43 @@ class StringMessage extends Message {
   }
 }
 
+class HudMessage extends Message {
+  HudMessage(this._label);
+
+  bool get enabled => _enabled;
+  bool _enabled = false;
+  set enabled(bool value) {
+    if (_enabled == value)
+      return;
+    _enabled = value;
+    update();
+  }
+
+  void enable() {
+    enabled = true;
+  }
+
+  void disable() {
+    enabled = false;
+  }
+
+  @override
+  String get label => _label;
+  String _label;
+  set label(String value) {
+    if (_label == value)
+      return;
+    _label = value;
+    update();
+  }
+
+  String get message {
+    if (!_enabled)
+      return null;
+    return _label;
+  }
+}
+
 class SpinnerMessage extends Message {
   SpinnerMessage();
 
@@ -145,6 +182,14 @@ class MessageCenter extends Model {
 
   StringMessage showMessage(String message) {
     StringMessage result = new StringMessage(message);
+    show(result);
+    return result;
+  }
+
+  HudMessage createHudMessage(String label, { bool on: false }) {
+    HudMessage result = new HudMessage(label);
+    if (on)
+      result.enable();
     show(result);
     return result;
   }

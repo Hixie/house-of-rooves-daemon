@@ -4,9 +4,10 @@ import 'dart:collection';
 import 'package:home_automation_tools/all.dart';
 
 import 'common.dart';
+import 'message_center.dart';
 
 class HouseSensorsModel extends Model {
-  HouseSensorsModel(this.cloud, this.remy, String houseSensorsId, { LogCallback onLog }) : super(onLog: onLog) {
+  HouseSensorsModel(this.cloud, this.remy, this.messageCenter, String houseSensorsId, { LogCallback onLog }) : super(onLog: onLog) {
     log('connecting to house sensors cloudbit ($houseSensorsId)');
     _cloudbit = cloud.getDevice(houseSensorsId);
     _subscriptions.add(_cloudbit.values.listen((int value) { _trackConnection(value != null); }));
@@ -24,6 +25,7 @@ class HouseSensorsModel extends Model {
 
   final LittleBitsCloud cloud;
   final RemyMultiplexer remy;
+  final MessageCenter messageCenter;
 
   static const Duration shortDebounceDuration = const Duration(milliseconds: 500);
   static const Duration longDebounceDuration = const Duration(milliseconds: 1500);
@@ -47,10 +49,12 @@ class HouseSensorsModel extends Model {
       subscription.cancel();
   }
 
-  StreamHandler<bool> _getDoorRemyProxy(String uiName, String remyName) {
+  StreamHandler<bool> _getDoorRemyProxy(String lowerName, String upperName) {
+    HudMessage hud = messageCenter.createHudMessage('$upperName door is open');
     return (bool value) {
-      log(value ? '$uiName door open' : '$uiName door closed');
-      remy.pushButtonById('houseSensor${remyName}Door${value ? "Open" : "Closed"}');
+      log(value ? '$lowerName door open' : '$lowerName door closed');
+      remy.pushButtonById('houseSensor${upperName}Door${value ? "Open" : "Closed"}');
+      hud.enabled = value;
     };
   }
 
