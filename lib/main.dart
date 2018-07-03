@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:home_automation_tools/all.dart';
 
 import 'src/air_quality.dart';
+import 'src/credentials.dart';
 import 'src/google_home.dart';
 import 'src/house_sensors.dart';
 import 'src/laundry.dart';
@@ -25,26 +26,6 @@ void log(String module, String s) {
   print('$timestamp $module: $s');
 }
 
-class Credentials {
-  Credentials(String filename) : this._lines = new File(filename).readAsLinesSync() {
-    if (_lines.length < _requiredCount)
-      throw new Exception('credentials file incomplete or otherwise corrupted');
-  }
-  final List<String> _lines;
-
-  String get littleBitsToken => _lines[0];
-  String get sunPowerCustomerId => _lines[1];
-  String get remyPassword => _lines[2];
-  String get tvHost => _lines[3];
-  String get tvUsername => _lines[4];
-  String get tvPassword => _lines[5];
-  String get ttsHost => _lines[6];
-  String get ttsPassword => _lines[7];
-  String get airNowApiKey => _lines[8];
-
-  int get _requiredCount => 9;
-}
-
 Future<Null> main() async {
   try {
     log('system', 'house of rooves deamon initialising...');
@@ -53,7 +34,7 @@ Future<Null> main() async {
 
     Credentials credentials = new Credentials('credentials.cfg');
     RemyMultiplexer remy = new RemyMultiplexer(
-      'automatic-tools-2',
+      'house-of-rooves-daemon@pi.rooves.house',
       credentials.remyPassword,
       onLog: (String message) { log('remy', message); },
     );
@@ -113,6 +94,7 @@ Future<Null> main() async {
     new LaundryRoomModel(
       cloud,
       remy,
+      tts,
       laundryId,
       onLog: (String message) { log('laundry', message); },
     );
@@ -154,6 +136,7 @@ Future<Null> main() async {
     new TelevisionModel(
       tv,
       remy,
+      messageCenter,
       onLog: (String message) { log('tv', message); },
     );
 
@@ -162,12 +145,6 @@ Future<Null> main() async {
       remy,
       onLog: (String message) { log('remy messages', message); },
     );
-
-    // TODO:
-    //  - Remy status reporter
-    //     - display messages on the TV
-    //     - play audio icon
-    //     - verbalize messages using the TTS server
 
     log('system', 'house of rooves deamon online');
 

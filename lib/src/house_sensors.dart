@@ -17,8 +17,8 @@ class HouseSensorsModel extends Model {
     _garageDoor = houseSensorsBits[2].transform(debouncer(shortDebounceDuration)).transform(inverter); // 20
     _backDoor = houseSensorsBits[3].transform(debouncer(shortDebounceDuration)).transform(inverter); // 40
     _subscriptions.add(frontDoor.listen(_getDoorRemyProxy('front', 'Front')));
-    _subscriptions.add(garageDoor.listen(_getDoorRemyProxy('garage', 'Garage')));
-    _subscriptions.add(backDoor.listen(_getDoorRemyProxy('back', 'Back')));
+    _subscriptions.add(garageDoor.listen(_getDoorRemyProxy('garage', 'Garage', hudTimeout: const Duration(seconds: 60))));
+    _subscriptions.add(backDoor.listen(_getDoorRemyProxy('back', 'Back', hudTimeout: const Duration(seconds: 10))));
     _timer = new Timer.periodic(updatePeriod, _updateOutput);
     log('model initialised');
   }
@@ -49,8 +49,8 @@ class HouseSensorsModel extends Model {
       subscription.cancel();
   }
 
-  StreamHandler<bool> _getDoorRemyProxy(String lowerName, String upperName) {
-    HudMessage hud = messageCenter.createHudMessage('$upperName door is open');
+  StreamHandler<bool> _getDoorRemyProxy(String lowerName, String upperName, { Duration hudTimeout }) {
+    HudMessage hud = messageCenter.createHudMessage('$upperName door is open', timeout: hudTimeout, reminder: const Duration(minutes: 10));
     return (bool value) {
       log(value ? '$lowerName door open' : '$lowerName door closed');
       remy.pushButtonById('houseSensor${upperName}Door${value ? "Open" : "Closed"}');

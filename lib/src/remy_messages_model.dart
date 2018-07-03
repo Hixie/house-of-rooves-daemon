@@ -52,7 +52,7 @@ class RemyMessagesModel extends Model {
     }
     bool visual = !notification.classes.contains('nomsg');
     bool verbal = notification.escalationLevel >= 3 && !muted;
-    bool beep = notification.escalationLevel != 2 && !muted;
+    bool beep = !muted;
     if (visual || verbal) {
       log('announcing "${notification.label}" (escalation level ${notification.escalationLevel}${ verbal ? "" : "; text only" })');
     } else if (beep) {
@@ -66,8 +66,8 @@ class RemyMessagesModel extends Model {
         auditoryIcon: beep,
         visual: visual,
       ).then((Null value) {
-        if (verbal)
-          log('announcement for "${notification.label}" complete.');
+        // if (verbal)
+        //   log('announcement for "${notification.label}" complete.');
       });
     }
     if (verbal || visual) {

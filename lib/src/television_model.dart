@@ -5,13 +5,15 @@ import 'dart:typed_data';
 import 'package:home_automation_tools/all.dart';
 
 import 'common.dart';
+import 'message_center.dart';
 
 class TelevisionModel extends Model {
-  TelevisionModel(this.tv, this.remy, { LogCallback onLog }) : super(onLog: onLog) {
+  TelevisionModel(this.tv, this.remy, this.messageCenter, { LogCallback onLog }) : super(onLog: onLog) {
     _identify();
     _updateStatus();
     _subscriptions.add(remy.getStreamForNotification('tv-on').listen(_handleRemyTvOn));
     _subscriptions.add(remy.getStreamForNotification('tv-off').listen(_handleRemyTvOff));
+    _subscriptions.add(remy.getStreamForNotification('tv-off-countdown').listen(_handleRemyTvOffCountdown));
     _subscriptions.add(remy.getStreamForNotificationWithArgument('tv-input').listen(_handleRemyTvSwitchInput));
     _subscriptions.add(remy.getStreamForNotificationWithArgument('tv-on-input').listen(_handleRemyTvOnAndSwitchInput));
     _subscriptions.add(remy.getStreamForNotificationWithArgument('wake-on-lan').listen(_handleRemyWakeOnLan));
@@ -21,6 +23,7 @@ class TelevisionModel extends Model {
 
   final Television tv;
   final RemyMultiplexer remy;
+  final MessageCenter messageCenter;
 
   Set<StreamSubscription<dynamic>> _subscriptions = new HashSet<StreamSubscription<dynamic>>();
 
@@ -165,13 +168,64 @@ class TelevisionModel extends Model {
     } 
   }
   
+  Future<Null> _handleRemyTvOffCountdown(bool value) async {
+    if (!value || !await _power)
+      return;
+    try {
+      log('initiating 60 second countdown for tv power off - silent sequence start');
+      await new Future<Null>.delayed(const Duration(seconds: 30));
+      log('30 seconds remain on countdown for tv power off - visual sequence start');
+      if (!await _power) {
+        log('countdown aborted');
+        return;
+      }
+      StringMessage message, clock;
+      SpinnerMessage spinner;
+      try {
+        message = new StringMessage('TV shutdown sequence initiated.');
+        messageCenter.show(message);
+        spinner = new SpinnerMessage();
+        messageCenter.show(spinner);
+        clock = new StringMessage('COUNTDOWN START');
+        messageCenter.show(clock);
+        await new Future<Null>.delayed(const Duration(milliseconds: 250));
+        for (int time = 30; time > 0; time -= 1) {
+          clock.message = 'T-$time seconds';
+          await new Future<Null>.delayed(const Duration(seconds: 1));
+          if (!await _power) {
+            log('countdown aborted at T-$time seconds');
+            return;
+          }
+        }
+      } finally {
+        clock?.hide();
+        spinner?.hide();
+        message?.hide();
+      }
+      await tv.setPower(false);
+      _scheduleCheck(const Duration(milliseconds: 10));
+    } on TelevisionException catch (error) {
+      log('unexpected response when performing television off countdown: $error');
+    } 
+  }
+
+  Future<bool> get _power async {
+    try {
+      if (await tv.power)
+        return true;
+    } on TelevisionException {
+    }
+    return false;
+  }
+  
   Future<Null> _handleRemyTvSwitchInput(String value) async {
-    if (value.startsWith('hdmi') &&
-        value.length == 5 &&
-        (value == 'hdmi1' ||
-         value == 'hdmi2' ||
-         value == 'hdmi3' ||
-         value == 'hdmi4')) {
+    if ((value.startsWith('hdmi') &&
+         value.length == 5 &&
+         (value == 'hdmi1' ||
+          value == 'hdmi2' ||
+          value == 'hdmi3' ||
+          value == 'hdmi4')) ||
+        (value == 'input5')) {
       try {
         TelevisionSource source;
         switch (value) {
@@ -186,6 +240,9 @@ class TelevisionModel extends Model {
             break;
           case 'hdmi4':
             source = TelevisionSource.hdmi4;
+            break;
+          case 'input5':
+            source = TelevisionSource.component;
             break;
         }
         assert(source != null);

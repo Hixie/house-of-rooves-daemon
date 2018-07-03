@@ -1,29 +1,27 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:io';
 
 import 'package:home_automation_tools/all.dart';
 
 import 'common.dart';
 
 class LaundryRoomModel extends Model {
-  LaundryRoomModel(this.cloud, this.remy, String laundryId, { LogCallback onLog }) : super(onLog: onLog) {
+  LaundryRoomModel(this.cloud, this.remy, this.tts, String laundryId, { LogCallback onLog }) : super(onLog: onLog) {
     log('connecting to laundry room cloudbit ($laundryId)');
     _cloudbit = cloud.getDevice(laundryId);
-    _miscSubscriptions.add(_cloudbit.values.listen(getRawValueDiskLogger(name: 'laundry', log: new File('logs/cloudbit.raw.log'))));
-    BitDemultiplexer laundryBits = new BitDemultiplexer(_cloudbit.values, 4);
-    _bit2Subscription = laundryBits[1].transform(debouncer(const Duration(milliseconds: 200))).listen(_handleSensingLedBit); // 5 - Sensing
-    _bit1Subscription = laundryBits[2].transform(debouncer(const Duration(seconds: 5))).listen(_handleDoneLedBit); //  10 - Done
-    _bit3Subscription = laundryBits[3].transform(debouncer(const Duration(milliseconds: 200))).listen(_handleButtonBit); // 20 - Button
-    _bit4Subscription = laundryBits[4].transform(debouncer(const Duration(seconds: 2))).listen(_handleDryerBit); // 40 - Dryer
+    BitDemultiplexer laundryBits = new BitDemultiplexer(_cloudbit.values, 3, onDebugObserver: _handleBits);
+    _bit1Subscription = laundryBits[1].transform(debouncer(const Duration(seconds: 1))).listen(_handleDoneLedBit); // 10 - Done
+    _bit2Subscription = laundryBits[2].transform(debouncer(const Duration(milliseconds: 500))).listen(_handleSensingLedBit); // 20 - Sensing
+    _bit3Subscription = laundryBits[3].transform(debouncer(const Duration(seconds: 2))).listen(_handleDryerBit); // 40 - Dryer
     _miscSubscriptions.add(remy.getStreamForNotification('laundry-led-on').listen(_handleLed));
     _miscSubscriptions.add(remy.getStreamForNotification('laundry-dryer-full').listen(_handleDryerFull));
+    _miscSubscriptions.add(remy.getStreamForNotification('laundry-announce-done').listen(_handleAnnounceDone));
     if (remy.hasNotification('laundry-status-washer-on')) {
-      log('restarting washer timer');
+      log('received laundry-status-washer-on on startup; restarting washer timer');
       washerRunning = true;
     }
     if (remy.hasNotification('laundry-status-dryer-on')) {
-      log('restarting dryer timer');
+      log('received laundry-status-dryer-on on startup; restarting dryer timer');
       dryerRunning = true;
     }
     log('model initialised');
@@ -31,45 +29,46 @@ class LaundryRoomModel extends Model {
 
   final LittleBitsCloud cloud;
   final RemyMultiplexer remy;
+  final TextToSpeechServer tts;
 
   CloudBit _cloudbit;
   StreamSubscription<bool> _bit1Subscription;
   StreamSubscription<bool> _bit2Subscription;
   StreamSubscription<bool> _bit3Subscription;
-  StreamSubscription<bool> _bit4Subscription;
   Set<StreamSubscription<dynamic>> _miscSubscriptions = new HashSet<StreamSubscription<dynamic>>();
 
   static const Duration _kMinWasherCycleDuration = const Duration(minutes: 15);
+  static const Duration _kMaxWasherCycleDuration = const Duration(hours: 4);
   static const Duration _kMinDryerCycleDuration = const Duration(minutes: 10);
+
+  Timer _washerTimeout;
 
   void dispose() {
     _bit1Subscription.cancel();
     _bit2Subscription.cancel();
     _bit3Subscription.cancel();
-    _bit4Subscription.cancel();
     for (StreamSubscription<bool> subscription in _miscSubscriptions)
       subscription.cancel();
+    _washerTimeout?.cancel();
+  }
+
+  int _lastValue;
+  void _handleBits(int value) {
+    if (_lastValue != value)
+      log('decomposed sensor value: 0b${value.toRadixString(2).padLeft(4, '0')} (0x${value.toRadixString(16).padLeft(2, '0')})');
+    _lastValue = value;
   }
 
   void _handleSensingLedBit(bool value) { // washer sensing LED bit
-    // This bit is inverted; true means it's off, false means its on.
-    log(value ? 'detected washer sensing LED off' : 'detected washer sensing LED on');
-    if (value == false)
+    log(value ? 'detected washer sensing LED on' : 'detected washer sensing LED off');
+    if (value == true)
       washerRunning = true;
   }
 
   void _handleDoneLedBit(bool value) { // washer done LED bit
-    // This bit is inverted; true means it's off, false means its on.
-    log(value ? 'detected washer done LED off' : 'detected washer done LED on');
-    if (value == false)
-      washerRunning = false;
-  }
-
-  void _handleButtonBit(bool value) { // button bit
-    // True means it's being pressed.
-    log(value ? 'detected button down' : 'detected button up');
+    log(value ? 'detected washer done LED on' : 'detected washer done LED off');
     if (value == true)
-      _handleButtonPushed();
+      washerRunning = false;
   }
 
   void _handleDryerBit(bool value) { // dryer knob bit
@@ -89,17 +88,22 @@ class LaundryRoomModel extends Model {
     _cloudbit.setValue(led ? 1023 : 0);
   }
 
+  // TODO(ianh): I need to move more of this logic over to remy.
+
   bool get washerRunning => _washerStopwatch.isRunning;
   Stopwatch _washerStopwatch = new Stopwatch();
   set washerRunning(bool value) {
     if (washerRunning == value)
       return;
+    _washerTimeout?.cancel();
+    _washerTimeout = null;
     if (value) {
       _washerStopwatch.reset();
       _washerStopwatch.start();
       log('washer started');
       remy.pushButtonById('laundryAutomaticWasherStarted');
       remy.pushButtonById('laundryAutomaticNone');
+      _washerTimeout = new Timer(_kMaxWasherCycleDuration, _resetWasher);
     } else {
       _washerStopwatch.stop();
       if (_washerStopwatch.elapsed >= _kMinWasherCycleDuration) {
@@ -110,6 +114,12 @@ class LaundryRoomModel extends Model {
         remy.pushButtonById('laundryAutomaticWasherFull');
       }
     }
+  }
+
+  void _resetWasher() {
+    // just in case we missed the "done" message
+    assert(washerRunning);
+    washerRunning = false;
   }
 
   bool get dryerFull => _dryerFull;
@@ -148,19 +158,15 @@ class LaundryRoomModel extends Model {
     }
   }
 
-  void _handleButtonPushed() {
-    log('button pushed');
-    if (!washerRunning) {
-      if (_ledStatus) {
-        log('button pushed while washer idle and LED on; interpreting this as a notification that the washer is empty');
-        remy.pushButtonById('laundryAutomaticWasherEmpty');
-      } else {
-        log('button pushed while washer idle and LED off; interpreting this as a notification that the washer has clean wet laundry');
-        remy.pushButtonById('laundryAutomaticWasherClean');
-      }
-    } else {
-      log('button pushed while washer running; interpreting this as a notification that the washer finished');
-      washerRunning = false;
-    }
+  bool _announce;
+  void _handleAnnounceDone(bool value) {
+    if (value == null || value == _announce)
+      return;
+    bool oldValue = _announce;
+    _announce = value;
+    if (oldValue == null || !_announce)
+      return;
+    log('received laundry-announce-done');
+    tts.audioIcon('laundry');
   }
 }

@@ -47,7 +47,13 @@ class StringMessage extends Message {
 }
 
 class HudMessage extends Message {
-  HudMessage(this._label);
+  HudMessage(this._label, { this.timeout, this.reminder });
+
+  final Duration timeout;
+  final Duration reminder;
+
+  Timer _timer;
+  bool _hidden = false;
 
   bool get enabled => _enabled;
   bool _enabled = false;
@@ -55,6 +61,14 @@ class HudMessage extends Message {
     if (_enabled == value)
       return;
     _enabled = value;
+    _hidden = false;
+    if (value) {
+      if (timeout != null)
+        _timer = new Timer(timeout, _triggerTimeout);
+    } else {
+      _timer?.cancel();
+      _timer = null;
+    }
     update();
   }
 
@@ -66,7 +80,6 @@ class HudMessage extends Message {
     enabled = false;
   }
 
-  @override
   String get label => _label;
   String _label;
   set label(String value) {
@@ -76,8 +89,23 @@ class HudMessage extends Message {
     update();
   }
 
+  void _triggerTimeout() {
+    _hidden = true;
+    update();
+    if (reminder != null)
+      _timer = new Timer(reminder, _triggerReminder);
+  }
+
+  void _triggerReminder() {
+    _hidden = false;
+    update();
+    if (timeout != null)
+      _timer = new Timer(timeout, _triggerTimeout);
+  }
+
+  @override
   String get message {
-    if (!_enabled)
+    if (!_enabled || _hidden)
       return null;
     return _label;
   }
@@ -186,8 +214,8 @@ class MessageCenter extends Model {
     return result;
   }
 
-  HudMessage createHudMessage(String label, { bool on: false }) {
-    HudMessage result = new HudMessage(label);
+  HudMessage createHudMessage(String label, { bool on: false, Duration timeout, Duration reminder }) {
+    HudMessage result = new HudMessage(label, timeout: timeout, reminder: reminder);
     if (on)
       result.enable();
     show(result);
@@ -213,7 +241,17 @@ class MessageCenter extends Model {
     if (auditoryIcon) {
       DateTime now = new DateTime.now();
       if (_lastAuditoryIconLevel < level || now.difference(_lastAuditoryIconTimeStamp) > const Duration(seconds: 20)) {
-        await tts.alarm(level);
+        switch (level) {
+          case 1: await tts.audioIcon('low-low-high-low'); break;
+          case 2: break;
+          case 3:
+          case 4:
+          case 5:
+          case 6:
+          case 7:
+          case 8: await tts.audioIcon('low-low-high-high'); break;
+          case 9: await tts.audioIcon('low-low-high-low-strident');
+        }
         _lastAuditoryIconTimeStamp = now;
         _lastAuditoryIconLevel = level;
       }

@@ -51,7 +51,7 @@ class ShowerDayModel extends Model {
     if (value == null)
       return;
     if (value) {
-      log('shower day button pressed');
+      log('shower day button pressed (current state is $_showerDayStatus)');
       remy.pushButtonById('showerDayCleanButton');
     }
   }
