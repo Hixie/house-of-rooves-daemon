@@ -13,6 +13,7 @@ import 'src/remy_messages_model.dart';
 import 'src/shower_day.dart';
 //import 'src/solar.dart';
 import 'src/television_model.dart';
+import 'src/test_cloudbit.dart';
 
 const String houseSensorsId = '243c201de435';
 const String laundryId = '00e04c02bd93';
@@ -164,6 +165,12 @@ Future<Null> main() async {
       messageCenter,
       remy,
       onLog: (String message) { log('remy messages', message); },
+    );
+
+    new TestCloudbitModel(
+      await cloudbits.getDevice(thermostatId),
+      tv,
+      onLog: (String message) { log('test cloudbit', message); },
     );
 
     log('system', 'house of rooves deamon online');
