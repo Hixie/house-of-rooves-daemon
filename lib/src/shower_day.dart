@@ -6,21 +6,18 @@ import 'package:home_automation_tools/all.dart';
 import 'common.dart';
 
 class ShowerDayModel extends Model {
-  ShowerDayModel(this.cloud, this.remy, String showerDayId, { LogCallback onLog }) : super(onLog: onLog) {
-    log('connecting to shower day cloudbit ($showerDayId)');
-    _cloudbit = cloud.getDevice(showerDayId);
+  ShowerDayModel(this._cloudbit, this.remy, { LogCallback onLog }) : super(onLog: onLog) {
     _buttonStream = new AlwaysOnWatchStream<bool>();
     _subscriptions.add(_cloudbit.values.listen(_showerDayButton));
-    _subscriptions.add(remy.getStreamForNotification('shower-day').listen(_handleRemyShowerState));
     // _subscriptions.add(_cloudbit.values.listen(getAverageValueLogger(log: log, name: 'shower day button', slop: 255.0, reportingThreshold: 10.0)));
     _subscriptions.add(_buttonStream.listen(_buttonRemyProxy));
+    _subscriptions.add(remy.getStreamForNotification('shower-day').listen(_handleRemyShowerState));
     log('model initialised');
   }
 
-  final LittleBitsCloud cloud;
   final RemyMultiplexer remy;
 
-  CloudBit _cloudbit;
+  final CloudBit _cloudbit;
   Set<StreamSubscription<dynamic>> _subscriptions = new HashSet<StreamSubscription<dynamic>>();
   WatchStream<bool> _buttonStream;
 
@@ -29,21 +26,11 @@ class ShowerDayModel extends Model {
       subscription.cancel();
   }
 
-  bool _buttonConnected = false;
   bool _showerDayStatus;
 
   void _showerDayButton(int value) {
-    final bool lastConnected = _buttonConnected;
-    _buttonConnected = value != null;
-    if (_buttonConnected != lastConnected) {
-      log('${_buttonConnected ? 'connected to' : 'disconnected from'} shower day cloudbit');
-      if (_buttonConnected && _showerDayStatus != null)
-        _updateCloudbit();
-    }
-    if (value == null) {
-      _buttonStream.add(null);
+    if (value == null)
       return;
-    }
     _buttonStream.add(value >= 512.0);
   }
 

@@ -6,39 +6,32 @@ import 'package:home_automation_tools/all.dart';
 import 'common.dart';
 
 class SolarModel extends Model {
-  SolarModel(this.cloud, this.monitor, this.remy, String solarId, { LogCallback onLog }) : super(onLog: onLog) {
-    log('connecting to solar display cloudbit ($solarId)');
-    _cloudbit = cloud.getDevice(solarId);
+  SolarModel(this._cloudbit, this.monitor, this.remy, { LogCallback onLog }) : super(onLog: onLog) {
     _motionStream = new AlwaysOnWatchStream<bool>();
     _subscriptions.add(_cloudbit.values.listen(_motionSensor));
     // _subscriptions.add(_cloudbit.values.listen(getAverageValueLogger(log: log, name: 'family room solar display', slop: 255.0, reportingThreshold: 10.0)));
     _subscriptions.add(monitor.power.listen(_power));
     _subscriptions.add(motionStream.listen(_motionRemyProxy));
-    _updater = new Timer.periodic(refreshPeriod, _updateDisplay);
     log('model initialised');
   }
 
-  final LittleBitsCloud cloud;
+  final CloudBit _cloudbit;
   final SunPowerMonitor monitor;
   final RemyMultiplexer remy;
 
-  static const Duration refreshPeriod = const Duration(seconds: 15); // cannot be more than half of 30 seconds (the max time to send to cloudbit)
   static const Duration motionIdleDuration = const Duration(minutes: 15);
   static const Duration remyUpdatePeriod = const Duration(minutes: 60);
 
   WatchStream<bool> get motionStream => _motionStream;
   WatchStream<bool> _motionStream;
 
-  CloudBit _cloudbit;
   Set<StreamSubscription<dynamic>> _subscriptions = new HashSet<StreamSubscription<dynamic>>();
-  Timer _updater;
 
   void dispose() {
     _motionStoppedTimer?.cancel();
     _motionStream.close();
     for (StreamSubscription<bool> subscription in _subscriptions)
       subscription.cancel();
-    _updater.cancel();
   }
 
   double _lastPower;
@@ -50,16 +43,16 @@ class SolarModel extends Model {
     if (newValue != _lastPower) {
       log('solar power ${value.toStringAsFixed(1)}kW');
       _lastPower = newValue;
-      _updateDisplay(_updater);
+      _updateDisplay();
     }
   }
 
   Stopwatch _remyUpdateStopwatch;
 
-  void _updateDisplay(Timer timer) {
+  void _updateDisplay() {
     if (_lastPower == null)
       return;
-    _cloudbit.setNumberVolts(_lastPower.clamp(0.0, 5.0), duration: refreshPeriod * 2.0);
+    _cloudbit.setNumberVolts(_lastPower.clamp(0.0, 5.0));
     if (_remyUpdateStopwatch == null || _remyUpdateStopwatch.elapsed > remyUpdatePeriod) {
       if (_lastPower > 4.0)
         remy.pushButtonById('weatherBright');

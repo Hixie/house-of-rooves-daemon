@@ -17,7 +17,7 @@ import 'src/television_model.dart';
 const String houseSensorsId = '243c201de435';
 const String laundryId = '00e04c02bd93';
 const String solarDisplayId = '243c201ddaf1';
-const String cloudBitTestId = '243c201dc805';
+const String cloudBitTestId = '243c201dc805'; // damaged :-(
 const String showerDayId = '243c201dcdfd';
 const String thermostatId = '00e04c0355d0';
 
@@ -38,22 +38,45 @@ Future<Null> main() async {
       credentials.remyPassword,
       onLog: (String message) { log('remy', message); },
     );
-    LittleBitsCloud cloud = new LittleBitsCloud(
-      authToken: credentials.littleBitsToken,
+    // LittleBitsCloud cloud = new LittleBitsCloud(
+    //   authToken: credentials.littleBitsToken,
+    //   onIdentify: (String deviceId) {
+    //     if (deviceId == houseSensorsId)
+    //       return 'house sensors';
+    //     if (deviceId == laundryId)
+    //       return 'laundry';
+    //     if (deviceId == solarDisplayId)
+    //       return 'solar display';
+    //     if (deviceId == cloudBitTestId)
+    //       return 'cloudbit test device';
+    //     if (deviceId == showerDayId)
+    //       return 'shower day display';
+    //     if (deviceId == thermostatId)
+    //       return 'thermostat';
+    //     return deviceId;
+    //   },
+    //   onError: (dynamic error) {
+    //     log('cloudbits', '$error');
+    //   },
+    //   onLog: (String deviceId, String message) {
+    //     log('cloudbits', message);
+    //   },
+    // );
+    LittleBitsLocalServer cloudbits = new LittleBitsLocalServer(
       onIdentify: (String deviceId) {
         if (deviceId == houseSensorsId)
-          return 'house sensors';
+          return const LocalCloudBitDeviceDescription('house sensors', 'cloudbit-housesensors.rooves.house');
         if (deviceId == laundryId)
-          return 'laundry';
+          return const LocalCloudBitDeviceDescription('laundry', 'cloudbit-laundry.rooves.house');
         if (deviceId == solarDisplayId)
-          return 'solar display';
+          return const LocalCloudBitDeviceDescription('solar display', 'cloudbit-solar.rooves.house');
         if (deviceId == cloudBitTestId)
-          return 'cloudbit test device';
+          return const LocalCloudBitDeviceDescription('cloudbit test device', 'cloudbit-test1.rooves.house');
         if (deviceId == showerDayId)
-          return 'shower day display';
+          return const LocalCloudBitDeviceDescription('shower day display', 'cloudbit-shower.rooves.house');
         if (deviceId == thermostatId)
-          return 'thermostat';
-        return deviceId;
+          return const LocalCloudBitDeviceDescription('thermostat', 'cloudbit-thermostat.rooves.house');
+        throw new Exception('Unknown cloudbit device ID: $deviceId');
       },
       onError: (dynamic error) {
         log('cloudbits', '$error');
@@ -92,26 +115,24 @@ Future<Null> main() async {
     // MODELS
 
     new LaundryRoomModel(
-      cloud,
+      await cloudbits.getDevice(laundryId),
       remy,
       tts,
-      laundryId,
       onLog: (String message) { log('laundry', message); },
     );
 
     new HouseSensorsModel(
-      cloud,
+      await cloudbits.getDevice(houseSensorsId),
       remy,
       messageCenter,
-      houseSensorsId,
+      tts,
       onLog: (String message) { log('house sensors', message); },
     );
 
     // new SolarModel(
-    //   cloud,
+    //   await cloudbits.getDevice(solarDisplayId),
     //   solar,
     //   remy,
-    //   solarDisplayId,
     //   onLog: (String message) { log('solar', message); },
     // );
 
@@ -122,9 +143,8 @@ Future<Null> main() async {
     );
 
     new ShowerDayModel(
-      cloud,
+      await cloudbits.getDevice(showerDayId),
       remy,
-      showerDayId,
       onLog: (String message) { log('shower day', message); },
     );
 

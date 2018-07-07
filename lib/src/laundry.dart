@@ -6,9 +6,7 @@ import 'package:home_automation_tools/all.dart';
 import 'common.dart';
 
 class LaundryRoomModel extends Model {
-  LaundryRoomModel(this.cloud, this.remy, this.tts, String laundryId, { LogCallback onLog }) : super(onLog: onLog) {
-    log('connecting to laundry room cloudbit ($laundryId)');
-    _cloudbit = cloud.getDevice(laundryId);
+  LaundryRoomModel(this._cloudbit, this.remy, this.tts, { LogCallback onLog }) : super(onLog: onLog) {
     BitDemultiplexer laundryBits = new BitDemultiplexer(_cloudbit.values, 3, onDebugObserver: _handleBits);
     _bit1Subscription = laundryBits[1].transform(debouncer(const Duration(seconds: 1))).listen(_handleDoneLedBit); // 10 - Done
     _bit2Subscription = laundryBits[2].transform(debouncer(const Duration(milliseconds: 500))).listen(_handleSensingLedBit); // 20 - Sensing
@@ -27,11 +25,10 @@ class LaundryRoomModel extends Model {
     log('model initialised');
   }
 
-  final LittleBitsCloud cloud;
+  final CloudBit _cloudbit;
   final RemyMultiplexer remy;
   final TextToSpeechServer tts;
 
-  CloudBit _cloudbit;
   StreamSubscription<bool> _bit1Subscription;
   StreamSubscription<bool> _bit2Subscription;
   StreamSubscription<bool> _bit3Subscription;
