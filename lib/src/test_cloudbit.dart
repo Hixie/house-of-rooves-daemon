@@ -54,13 +54,17 @@ class TestCloudbitModel extends Model {
   }
 
   bool _busy = false;
+  Stopwatch _timeSinceColor = new Stopwatch();
 
   Future<Null> _update() async {
     if (_busy)
       return;
     _busy = true;
     try {
-      _cloudbit.setLedColor(LedColor.values[_mode.index]);
+      if (_newInMode || _timeSinceColor.elapsedMilliseconds > 60000) {
+        _cloudbit.setLedColor(LedColor.values[_mode.index]);
+        _timeSinceColor..reset()..start();
+      }
       switch (_mode) {
         case TestCloudbitMode.off:
           if (_newInMode)

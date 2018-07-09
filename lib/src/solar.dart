@@ -4,9 +4,10 @@ import 'dart:collection';
 import 'package:home_automation_tools/all.dart';
 
 import 'common.dart';
+import 'message_center.dart';
 
 class SolarModel extends Model {
-  SolarModel(this._cloudbit, this.monitor, this.remy, { LogCallback onLog }) : super(onLog: onLog) {
+  SolarModel(this._cloudbit, this.monitor, this.remy, this.messageCenter, { LogCallback onLog }) : super(onLog: onLog) {
     _motionStream = new AlwaysOnWatchStream<bool>();
     _subscriptions.add(_cloudbit.values.listen(_motionSensor));
     // _subscriptions.add(_cloudbit.values.listen(getAverageValueLogger(log: log, name: 'family room solar display', slop: 255.0, reportingThreshold: 10.0)));
@@ -18,21 +19,16 @@ class SolarModel extends Model {
   final CloudBit _cloudbit;
   final SunPowerMonitor monitor;
   final RemyMultiplexer remy;
+  final MessageCenter messageCenter;
 
-  static const Duration motionIdleDuration = const Duration(minutes: 15);
-  static const Duration remyUpdatePeriod = const Duration(minutes: 60);
+  static const Duration motionWarningDuration = const Duration(minutes: 50);
+  static const Duration motionIdleDuration = const Duration(minutes: 60);
+  static const Duration remySunLevelMinPeriod = const Duration(minutes: 60);
 
   WatchStream<bool> get motionStream => _motionStream;
   WatchStream<bool> _motionStream;
 
   Set<StreamSubscription<dynamic>> _subscriptions = new HashSet<StreamSubscription<dynamic>>();
-
-  void dispose() {
-    _motionStoppedTimer?.cancel();
-    _motionStream.close();
-    for (StreamSubscription<bool> subscription in _subscriptions)
-      subscription.cancel();
-  }
 
   double _lastPower;
 
@@ -52,8 +48,8 @@ class SolarModel extends Model {
   void _updateDisplay() {
     if (_lastPower == null)
       return;
-    _cloudbit.setNumberVolts(_lastPower.clamp(0.0, 5.0));
-    if (_remyUpdateStopwatch == null || _remyUpdateStopwatch.elapsed > remyUpdatePeriod) {
+    _cloudbit.setNumberVolts(_lastPower.clamp(0.0, 5.0), silent: true);
+    if (_remyUpdateStopwatch == null || _remyUpdateStopwatch.elapsed > remySunLevelMinPeriod) {
       if (_lastPower > 4.0)
         remy.pushButtonById('weatherBright');
       else if (_lastPower > 0.1)
@@ -67,28 +63,25 @@ class SolarModel extends Model {
   }
 
   bool _lastMotionSensorValue;
-  bool _motionSensorConnected = false;
+  Timer _motionStoppedWarningTimer;
   Timer _motionStoppedTimer;
 
   void _motionSensor(int value) {
-    final bool lastConnected = _motionSensorConnected;
-    _motionSensorConnected = value != null;
-    if (_motionSensorConnected != lastConnected)
-      log('${_motionSensorConnected ? 'connected to' : 'disconnected from'} family room solar display cloudbit');
-    if (value == null) {
-      _motionStoppedTimer?.cancel();
-      _motionStoppedTimer = null;
-      _motionStream.add(null);
-      _lastMotionSensorValue = null;
+    if (value == null)
       return;
-    }
     final bool newMotionSensorValue = value >= 512.0;
     if (_lastMotionSensorValue != newMotionSensorValue) {
       if (newMotionSensorValue) {
+        _motionStoppedWarningTimer?.cancel();
+        _motionStoppedWarningTimer = null;
         _motionStoppedTimer?.cancel();
         _motionStoppedTimer = null;
         _motionStream.add(true);
       } else {
+        _motionStoppedWarningTimer = new Timer(motionWarningDuration, () {
+          _motionStoppedWarningTimer = null;
+          messageCenter.announce('Room seems to be empty; TV will sleep soon.', 0, verbal: false, auditoryIcon: false);
+        });
         _motionStoppedTimer = new Timer(motionIdleDuration, () {
           _motionStoppedTimer = null;
           _motionStream.add(false);
@@ -108,5 +101,13 @@ class SolarModel extends Model {
       log('no motion detected');
       remy.pushButtonById('houseSensorFamilyRoomIdle');
     }
+  }
+
+  void dispose() {
+    _motionStoppedWarningTimer?.cancel();
+    _motionStoppedTimer?.cancel();
+    _motionStream.close();
+    for (StreamSubscription<bool> subscription in _subscriptions)
+      subscription.cancel();
   }
 }

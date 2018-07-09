@@ -11,7 +11,7 @@ import 'src/laundry.dart';
 import 'src/message_center.dart';
 import 'src/remy_messages_model.dart';
 import 'src/shower_day.dart';
-//import 'src/solar.dart';
+import 'src/solar.dart';
 import 'src/television_model.dart';
 import 'src/test_cloudbit.dart';
 
@@ -86,16 +86,15 @@ Future<Null> main() async {
         log('cloudbits', message);
       },
     );
-    // SunPowerMonitor solar = new SunPowerMonitor(
-    //   customerId: credentials.sunPowerCustomerId,
-    //   onError: (dynamic error) {
-    //     log('sunpower', '$error');
-    //   },
-    // );
+    SunPowerMonitor solar = new SunPowerMonitor(
+      customerUsername: credentials.sunPowerCustomerUsername,
+      customerPassword: credentials.sunPowerCustomerPassword,
+      onLog: (String message) { log('sunpower', message); },
+    );
     AirQualityMonitor airQuality = new AirQualityMonitor(
       apiKey: credentials.airNowApiKey,
       area: new GeoBox(-122.291453,37.306551, -121.946757,37.513806),
-      onError: (String message) { log('airnowapi', message); },
+      onLog: (String message) { log('airnowapi', message); },
     );
     TextToSpeechServer tts = new TextToSpeechServer(
       host: credentials.ttsHost,
@@ -130,12 +129,13 @@ Future<Null> main() async {
       onLog: (String message) { log('house sensors', message); },
     );
 
-    // new SolarModel(
-    //   await cloudbits.getDevice(solarDisplayId),
-    //   solar,
-    //   remy,
-    //   onLog: (String message) { log('solar', message); },
-    // );
+    new SolarModel(
+      await cloudbits.getDevice(solarDisplayId),
+      solar,
+      remy,
+      messageCenter,
+      onLog: (String message) { log('solar', message); },
+    );
 
     new AirQualityModel(
       airQuality,
