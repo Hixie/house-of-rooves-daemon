@@ -55,6 +55,9 @@ class HudMessage extends Message {
   Timer _timer;
   bool _hidden = false;
 
+  @override
+  bool get requiresCleanup => true;
+
   bool get enabled => _enabled;
   bool _enabled = false;
   set enabled(bool value) {
@@ -301,6 +304,7 @@ class MessageCenter extends Model {
     String line = components.join(' | ');
     if (line.isNotEmpty || _cleanupScheduled) {
       tv.showMessage(line).catchError((dynamic error, StackTrace stack) {
+        log('failed: $error');
         assert(error is TelevisionException);
         // TV is probably turned off or something.
       });

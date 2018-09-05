@@ -8,6 +8,7 @@ import 'common.dart';
 enum TestCloudbitMode {
   off,
   echo,
+  serial,
   tvVolume,
 }
 
@@ -19,7 +20,7 @@ class TestCloudbitModel extends Model {
     log('model initialised');
   }
 
-  final CloudBit _cloudbit;
+  final Localbit _cloudbit;
   final Television _tv;
   Set<StreamSubscription<dynamic>> _subscriptions = new HashSet<StreamSubscription<dynamic>>();
 
@@ -47,10 +48,12 @@ class TestCloudbitModel extends Model {
     if (value == true) {
       _mode = TestCloudbitMode.values[(_mode.index + 1) % TestCloudbitMode.values.length];
       log('switching to $_mode');
-      _timeSinceButton..reset()..start();
+      _timeSinceButton..reset()..stop();
       _newInMode = true;
-      _update();
+    } else {
+      _timeSinceButton..reset()..start();
     }
+    _update();
   }
 
   bool _busy = false;
@@ -73,19 +76,16 @@ class TestCloudbitModel extends Model {
         case TestCloudbitMode.echo:
           _cloudbit.setValue(_value, silent: true);
           break;
-        case TestCloudbitMode.tvVolume:
-          await _maybeGetVolume();
-          break;
-      }
-      if (_timeSinceButton.elapsedMilliseconds < 1000)
-        return;
-      switch (_mode) {
-        case TestCloudbitMode.off:
-          break;
-        case TestCloudbitMode.echo:
+        case TestCloudbitMode.serial:
+          log('Sending message...');
+          _cloudbit.sendText('Hi');
           break;
         case TestCloudbitMode.tvVolume:
-          await _maybeSetVolume(((_value / 1024.0) * 40.0).round());
+          if (_timeSinceButton.elapsedMilliseconds > 2000 && _value != null) {
+            await _maybeSetVolume(((_value / 1024.0) * 40.0).round());
+          } else {
+            await _maybeGetVolume();
+          }
           break;
       }
     } finally {
@@ -115,7 +115,7 @@ class TestCloudbitModel extends Model {
     assert(_busy);
     if (_currentVolume != targetVolume) {
       try {
-        log('setting TV volume to $targetVolume% (current volume is $_currentVolume%)');
+        log('setting TV volume to $targetVolume% (current volume is ${ _currentVolume != null ? "$_currentVolume%" : "unknown" })');
         await _tv.setVolume(targetVolume);
         _currentVolume = targetVolume;
       } catch (error) {
@@ -135,7 +135,8 @@ class TestCloudbitModel extends Model {
       log('error reading TV volume: $error');
     }
     if (oldVolume != _currentVolume)
-      log('TV volume is $_currentVolume%');
-    _cloudbit.setValue(((_currentVolume / 40.0) * 1024.0).round().clamp(0, 1024), silent: true);
+      log('TV volume is ${ _currentVolume != null ? "$_currentVolume%" : "unknown" }');
+    if (_currentVolume != null)
+      _cloudbit.setValue(((_currentVolume / 40.0) * 1024.0).round().clamp(0, 1024), silent: true);
   }
 }

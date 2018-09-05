@@ -79,9 +79,6 @@ Future<Null> main() async {
           return const LocalCloudBitDeviceDescription('thermostat', 'cloudbit-thermostat.rooves.house');
         throw new Exception('Unknown cloudbit device ID: $deviceId');
       },
-      onError: (dynamic error) {
-        log('cloudbits', '$error');
-      },
       onLog: (String deviceId, String message) {
         log('cloudbits', message);
       },
@@ -99,13 +96,18 @@ Future<Null> main() async {
     TextToSpeechServer tts = new TextToSpeechServer(
       host: credentials.ttsHost,
       password: credentials.ttsPassword,
+      onLog: (String message) { log('tts', message); },
     );
     Television tv = new Television(
       host: (await InternetAddress.lookup(credentials.tvHost)).first,
       username: credentials.tvUsername,
       password: credentials.tvPassword,
     );
-    MessageCenter messageCenter = new MessageCenter(tv, tts);
+    MessageCenter messageCenter = new MessageCenter(
+      tv,
+      tts,
+      onLog: (String message) { log('message center', message); },
+    );
     await remy.ready;
 
     // TODO:
