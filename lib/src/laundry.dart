@@ -51,6 +51,8 @@ class LaundryRoomModel extends Model {
 
   int _lastValue;
   void _handleBits(int value) {
+    if (privateMode)
+      return;
     if (_lastValue != value)
       log('decomposed sensor value: 0b${value.toRadixString(2).padLeft(4, '0')} (0x${value.toRadixString(16).padLeft(2, '0')})');
     _lastValue = value;

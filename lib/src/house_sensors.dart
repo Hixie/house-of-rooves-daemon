@@ -41,6 +41,8 @@ class HouseSensorsModel extends Model {
   StreamHandler<bool> _getDoorRemyProxy(String lowerName, String upperName, { Duration hudTimeout, String icon }) {
     HudMessage hud = messageCenter.createHudMessage('$upperName door is open', timeout: hudTimeout, reminder: const Duration(minutes: 10));
     return (bool value) {
+      if (privateMode)
+        return;
       log(value ? '$lowerName door open' : '$lowerName door closed');
       remy.pushButtonById('houseSensor${upperName}Door${value ? "Open" : "Closed"}');
       hud.enabled = value;

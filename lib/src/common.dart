@@ -6,6 +6,19 @@ abstract class Model {
 
   final LogCallback onLog;
 
+  bool get privateMode => _privateMode;
+  bool _privateMode = false;
+  set privateMode(bool value) {
+    if (value == _privateMode)
+      return;
+    _privateMode = value;
+    if (privateMode) {
+      log('private mode enabled');
+    } else {
+      log('private mode disabled');
+    }
+  }
+
   @protected
   void log(String message) {
     if (onLog != null)

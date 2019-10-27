@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:home_automation_tools/all.dart';
 
 import 'src/air_quality.dart';
+import 'src/common.dart';
 import 'src/credentials.dart';
 import 'src/google_home.dart';
 import 'src/house_sensors.dart';
@@ -13,14 +14,14 @@ import 'src/remy_messages_model.dart';
 import 'src/shower_day.dart';
 import 'src/solar.dart';
 import 'src/television_model.dart';
-import 'src/test_cloudbit.dart';
+// import 'src/test_cloudbit.dart';
 
 const String houseSensorsId = '243c201de435';
 const String laundryId = '00e04c02bd93';
 const String solarDisplayId = '243c201ddaf1';
 const String cloudBitTestId = '243c201dc805'; // damaged :-(
-const String showerDayId = '243c201dcdfd';
-const String thermostatId = '00e04c0355d0';
+const String showerDayId = '00e04c0355d0'; // was '243c201dcdfd', but that is damaged :-(
+//const String testCloudbitId = '000000000000'; // non-existent
 
 void log(String module, String s) {
   String timestamp = new DateTime.now().toIso8601String().padRight(26, '0');
@@ -52,8 +53,8 @@ Future<Null> main() async {
     //       return 'cloudbit test device';
     //     if (deviceId == showerDayId)
     //       return 'shower day display';
-    //     if (deviceId == thermostatId)
-    //       return 'thermostat';
+    //     if (deviceId == testCloudbitId)
+    //       return 'test';
     //     return deviceId;
     //   },
     //   onError: (dynamic error) {
@@ -75,8 +76,8 @@ Future<Null> main() async {
           return const LocalCloudBitDeviceDescription('cloudbit test device', 'cloudbit-test1.rooves.house');
         if (deviceId == showerDayId)
           return const LocalCloudBitDeviceDescription('shower day display', 'cloudbit-shower.rooves.house');
-        if (deviceId == thermostatId)
-          return const LocalCloudBitDeviceDescription('thermostat', 'cloudbit-thermostat.rooves.house');
+        // if (deviceId == testCloudbitId)
+        //   return const LocalCloudBitDeviceDescription('test', 'cloudbit-test.rooves.house');
         throw new Exception('Unknown cloudbit device ID: $deviceId');
       },
       onLog: (String deviceId, String message) {
@@ -116,64 +117,63 @@ Future<Null> main() async {
 
     // MODELS
 
-    new LaundryRoomModel(
-      await cloudbits.getDevice(laundryId),
-      remy,
-      tts,
-      onLog: (String message) { log('laundry', message); },
-    );
+    List<Model> models = <Model>[
+      new LaundryRoomModel(
+        await cloudbits.getDevice(laundryId),
+        remy,
+        tts,
+        onLog: (String message) { log('laundry', message); },
+      ),
+      new HouseSensorsModel(
+        await cloudbits.getDevice(houseSensorsId),
+        remy,
+        messageCenter,
+        tts,
+        onLog: (String message) { log('house sensors', message); },
+      ),
+      new SolarModel(
+        await cloudbits.getDevice(solarDisplayId),
+        solar,
+        remy,
+        messageCenter,
+        onLog: (String message) { log('solar', message); },
+      ),
+      new AirQualityModel(
+        airQuality,
+        remy,
+        onLog: (String message) { log('air quality', message); },
+      ),
+      new ShowerDayModel(
+        await cloudbits.getDevice(showerDayId),
+        remy,
+        onLog: (String message) { log('shower day', message); },
+      ),
+      new GoogleHomeModel(
+        remy,
+        onLog: (String message) { log('home', message); },
+      ),
+      new TelevisionModel(
+        tv,
+        remy,
+        messageCenter,
+        onLog: (String message) { log('tv', message); },
+      ),
+      new RemyMessagesModel(
+        messageCenter,
+        remy,
+        onLog: (String message) { log('remy messages', message); },
+      ),
+      // new TestCloudbitModel(
+      //   await cloudbits.getDevice(testCloudbitId),
+      //   tv,
+      //   onLog: (String message) { log('test cloudbit', message); },
+      // ),
+    ];
 
-    new HouseSensorsModel(
-      await cloudbits.getDevice(houseSensorsId),
-      remy,
-      messageCenter,
-      tts,
-      onLog: (String message) { log('house sensors', message); },
-    );
-
-    new SolarModel(
-      await cloudbits.getDevice(solarDisplayId),
-      solar,
-      remy,
-      messageCenter,
-      onLog: (String message) { log('solar', message); },
-    );
-
-    new AirQualityModel(
-      airQuality,
-      remy,
-      onLog: (String message) { log('air quality', message); },
-    );
-
-    new ShowerDayModel(
-      await cloudbits.getDevice(showerDayId),
-      remy,
-      onLog: (String message) { log('shower day', message); },
-    );
-
-    new GoogleHomeModel(
-      remy,
-      onLog: (String message) { log('home', message); },
-    );
-
-    new TelevisionModel(
-      tv,
-      remy,
-      messageCenter,
-      onLog: (String message) { log('tv', message); },
-    );
-
-    new RemyMessagesModel(
-      messageCenter,
-      remy,
-      onLog: (String message) { log('remy messages', message); },
-    );
-
-    new TestCloudbitModel(
-      await cloudbits.getDevice(thermostatId),
-      tv,
-      onLog: (String message) { log('test cloudbit', message); },
-    );
+    remy.getStreamForNotification('private-mode').listen((bool state) {
+      for (Model model in models)
+        model.privateMode = state;
+    });
 
     log('system', 'house of rooves deamon online');
 

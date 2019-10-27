@@ -50,7 +50,7 @@ class SolarModel extends Model {
       return;
     _cloudbit.setNumberVolts(_lastPower.clamp(0.0, 5.0), silent: true);
     if (_remyUpdateStopwatch == null || _remyUpdateStopwatch.elapsed > remySunLevelMinPeriod) {
-      if (_lastPower > 4.0)
+      if (_lastPower > 2.0)
         remy.pushButtonById('weatherBright');
       else if (_lastPower > 0.1)
         remy.pushButtonById('weatherDim');
@@ -67,6 +67,8 @@ class SolarModel extends Model {
   Timer _motionStoppedTimer;
 
   void _motionSensor(int value) {
+    if (privateMode)
+      return;
     if (value == null)
       return;
     final bool newMotionSensorValue = value >= 512.0;

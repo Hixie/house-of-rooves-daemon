@@ -225,48 +225,72 @@ class MessageCenter extends Model {
     return result;
   }
 
+  static const Duration _audioTimeout = const Duration(seconds: 5);
+  static const Duration _verbalTimeout = const Duration(seconds: 30);
+
   int _lastAuditoryIconLevel = 0;
   DateTime _lastAuditoryIconTimeStamp = new DateTime.now();
 
   bool _active = true;
   Future<Null> _lastInLine = new Future<Null>.value(null);
+  static int _announceCount = 0;
   Future<Null> announce(String message, int level, { bool verbal: true, bool auditoryIcon: true, bool visual: true, Duration duration: const Duration(seconds: 5) }) async {
+    _announceCount += 1;
+    final int id = _announceCount;
+    //log('announce #$id: "$message" (level=$level, ${verbal ? 'verbal, ' : ''}${auditoryIcon ? 'audio icon, ' : ''}${visual ? 'visual, ' : ''}for ${prettyDuration(duration)})');
     Completer<Null> completer = new Completer<Null>();
     Future<Null> previousInLine = _lastInLine;
     _lastInLine = completer.future;
     await previousInLine;
-    if (!_active)
+    //log('announce #$id: next in line');
+    if (!_active) {
+      //log('announce #$id: canceled (inactive)');
       return;
+    }
     StringMessage visualHandle;
-    if (visual)
+    if (visual) {
+      //log('announce #$id: calling showMessage()');
       visualHandle = showMessage(message);
+    }
     Future<Null> timeout = new Future<Null>.delayed(duration);
     if (auditoryIcon) {
       DateTime now = new DateTime.now();
+      //log('announce #$id: considering playing audio icon at level $level; last level was $_lastAuditoryIconLevel, ${prettyDuration(now.difference(_lastAuditoryIconTimeStamp))} ago');
       if (_lastAuditoryIconLevel < level || now.difference(_lastAuditoryIconTimeStamp) > const Duration(seconds: 20)) {
+        //log('announce #$id: playing audio icon at level $level');
         switch (level) {
-          case 1: await tts.audioIcon('low-low-high-low'); break;
-          case 2: break;
+          case 1: await tts.audioIcon('low-low-high-low').timeout(_audioTimeout, onTimeout: () => null); break;
+          case 2:
           case 3:
           case 4:
           case 5:
           case 6:
           case 7:
-          case 8: await tts.audioIcon('low-low-high-high'); break;
-          case 9: await tts.audioIcon('low-low-high-low-strident');
+          case 8: await tts.audioIcon('low-low-high-high').timeout(_audioTimeout, onTimeout: () => null); break;
+          case 9: await tts.audioIcon('low-low-high-low-strident').timeout(_audioTimeout, onTimeout: () => null); break;
         }
         _lastAuditoryIconTimeStamp = now;
         _lastAuditoryIconLevel = level;
       }
     }
-    if (!_active)
+    if (!_active) {
+      //log('announce #$id: canceled (inactive)');
       return;
-    if (verbal)
-      await tts.speak(message);
+    }
+    if (verbal) {
+      //log('announce #$id: speaking message verbally');
+      await tts.speak(message).timeout(_verbalTimeout, onTimeout: () => null);
+    }
+    //log('announce #$id: waiting for timeout... (${prettyDuration(duration)} since showing visual message)');
     await timeout;
-    if (!_active)
+    //log('announce #$id: timeout expired');
+    if (!_active) {
+      //log('announce #$id: canceled (inactive)');
       return;
+    }
+    //log('announce #$id: hiding visual message, if any');
     visualHandle?.hide();
+    //log('announce #$id: handing baton to next message');
     completer.complete();
   }
 
@@ -314,6 +338,7 @@ class MessageCenter extends Model {
   }
 
   void dispose() {
+    log('disposing...');
     _active = false;
     _updateScheduled = true;
     for (Message message in _messages.toList())

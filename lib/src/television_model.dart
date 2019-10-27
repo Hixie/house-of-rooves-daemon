@@ -55,75 +55,77 @@ class TelevisionModel extends Model {
     _timer?.cancel();
     _timer = null;
     Duration nextDelay = const Duration(seconds: 10);
-    try {
-      bool power;
-      String input;
-      switch ((await tv.input).source) {
-        case TelevisionSource.analog:
-        case TelevisionSource.analogAir:
-        case TelevisionSource.analogCable:
-        case TelevisionSource.digitalAir:
-        case TelevisionSource.digitalCableOnePart:
-        case TelevisionSource.digitalCableTwoPart:
-          power = true;
-          input = 'Channel';
-          break;
-        case TelevisionSource.hdmi1:
-          power = true;
-          input = 'Hdmi1';
-          break;
-        case TelevisionSource.hdmi2:
-          power = true;
-          input = 'Hdmi2';
-          break;
-        case TelevisionSource.hdmi3:
-          power = true;
-          input = 'Hdmi3';
-          break;
-        case TelevisionSource.hdmi4:
-          power = true;
-          input = 'Hdmi4';
-          break;
-        case TelevisionSource.input5:
-        case TelevisionSource.composite:
-        case TelevisionSource.component:
-          power = true;
-          input = 'Input5';
-          break;
-        case TelevisionSource.ethernet:
-        case TelevisionSource.storage:
-        case TelevisionSource.miracast:
-        case TelevisionSource.bluetooth:
-        case TelevisionSource.manual:
-          power = true;
-          input = 'Network';
-          break;
-        case TelevisionSource.unknown:
-          power = true;
-          nextDelay = const Duration(seconds: 2);
-          break;
-        case TelevisionSource.switching:
-          power = true;
-          nextDelay = const Duration(seconds: 1);
-          break;
-        case TelevisionSource.off:
-          power = false;
-          break;
-      }
-      if (power != null && power != _lastPowerStatus) {
-        if (power) {
-          remy.pushButtonById('tvOn');
-        } else {
-          remy.pushButtonById('tvOff');
+    if (!privateMode) {
+      try {
+        bool power;
+        String input;
+        switch ((await tv.input).source) {
+          case TelevisionSource.analog:
+          case TelevisionSource.analogAir:
+          case TelevisionSource.analogCable:
+          case TelevisionSource.digitalAir:
+          case TelevisionSource.digitalCableOnePart:
+          case TelevisionSource.digitalCableTwoPart:
+            power = true;
+            input = 'Channel';
+            break;
+          case TelevisionSource.hdmi1:
+            power = true;
+            input = 'Hdmi1';
+            break;
+          case TelevisionSource.hdmi2:
+            power = true;
+            input = 'Hdmi2';
+            break;
+          case TelevisionSource.hdmi3:
+            power = true;
+            input = 'Hdmi3';
+            break;
+          case TelevisionSource.hdmi4:
+            power = true;
+            input = 'Hdmi4';
+            break;
+          case TelevisionSource.input5:
+          case TelevisionSource.composite:
+          case TelevisionSource.component:
+            power = true;
+            input = 'Input5';
+            break;
+          case TelevisionSource.ethernet:
+          case TelevisionSource.storage:
+          case TelevisionSource.miracast:
+          case TelevisionSource.bluetooth:
+          case TelevisionSource.manual:
+            power = true;
+            input = 'Network';
+            break;
+          case TelevisionSource.unknown:
+            power = true;
+            nextDelay = const Duration(seconds: 2);
+            break;
+          case TelevisionSource.switching:
+            power = true;
+            nextDelay = const Duration(seconds: 1);
+            break;
+          case TelevisionSource.off:
+            power = false;
+            break;
         }
-        _lastPowerStatus = power;
+        if (power != null && power != _lastPowerStatus) {
+          if (power) {
+            remy.pushButtonById('tvOn');
+          } else {
+            remy.pushButtonById('tvOff');
+          }
+          _lastPowerStatus = power;
+        }
+        if (input != null && input != _lastInputStatus) {
+          remy.pushButtonById('tvInput$input');
+          _lastInputStatus = input;
+        }
+      } on TelevisionException catch (error) {
+        log('unexpected response when updating television status: $error');
       }
-      if (input != null && input != _lastInputStatus) {
-        remy.pushButtonById('tvInput$input');
-        _lastInputStatus = input;
-      }
-    } on TelevisionException catch (error) {
-      log('unexpected response when updating television status: $error');
     }
     _checking = false;
     _scheduleCheck(nextDelay);
