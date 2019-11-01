@@ -23,6 +23,7 @@ class SolarModel extends Model {
 
   static const Duration motionWarningDuration = const Duration(minutes: 50);
   static const Duration motionIdleDuration = const Duration(minutes: 60);
+
   static const Duration remySunLevelMinPeriod = const Duration(minutes: 60);
 
   WatchStream<bool> get motionStream => _motionStream;
@@ -50,9 +51,9 @@ class SolarModel extends Model {
       return;
     _cloudbit.setNumberVolts(_lastPower.clamp(0.0, 5.0), silent: true);
     if (_remyUpdateStopwatch == null || _remyUpdateStopwatch.elapsed > remySunLevelMinPeriod) {
-      if (_lastPower > 2.0)
+      if (_lastPower > 1.0)
         remy.pushButtonById('weatherBright');
-      else if (_lastPower > 0.1)
+      else if (_lastPower > 0.0)
         remy.pushButtonById('weatherDim');
       else
         remy.pushButtonById('weatherDark');
@@ -94,6 +95,8 @@ class SolarModel extends Model {
   }
 
   void _motionRemyProxy(bool value) {
+    if (privateMode)
+      return;
     if (value == null)
       return;
     if (value) {

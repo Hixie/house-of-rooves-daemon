@@ -233,10 +233,10 @@ class MessageCenter extends Model {
 
   bool _active = true;
   Future<Null> _lastInLine = new Future<Null>.value(null);
-  static int _announceCount = 0;
+  // static int _announceCount = 0;
   Future<Null> announce(String message, int level, { bool verbal: true, bool auditoryIcon: true, bool visual: true, Duration duration: const Duration(seconds: 5) }) async {
-    _announceCount += 1;
-    final int id = _announceCount;
+    //_announceCount += 1;
+    //final int id = _announceCount;
     //log('announce #$id: "$message" (level=$level, ${verbal ? 'verbal, ' : ''}${auditoryIcon ? 'audio icon, ' : ''}${visual ? 'visual, ' : ''}for ${prettyDuration(duration)})');
     Completer<Null> completer = new Completer<Null>();
     Future<Null> previousInLine = _lastInLine;

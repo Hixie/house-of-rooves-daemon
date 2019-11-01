@@ -17,6 +17,9 @@ class Credentials {
   String get ttsHost => _lines[7];
   String get ttsPassword => _lines[8];
   String get airNowApiKey => _lines[9];
+  String get thermostatHost => _lines[10];
+  String get thermostatUsername => _lines[11];
+  String get thermostatPassword => _lines[12];
 
-  int get _requiredCount => 9;
+  int get _requiredCount => 12;
 }

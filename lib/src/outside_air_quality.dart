@@ -6,13 +6,13 @@ import 'package:home_automation_tools/all.dart';
 
 import 'common.dart';
 
-class AirQualityModel extends Model {
-  AirQualityModel(this.dataSource, this.remy, { LogCallback onLog }) : super(onLog: onLog) {
+class OutsideAirQualityModel extends Model {
+  OutsideAirQualityModel(this.dataSource, this.remy, { LogCallback onLog }) : super(onLog: onLog) {
     _subscriptions.add(dataSource.value.listen(_handler));
     log('model initialised');
   }
 
-  final AirQualityMonitor dataSource;
+  final AirNowAirQualityMonitor dataSource;
   final RemyMultiplexer remy;
 
   Set<StreamSubscription<dynamic>> _subscriptions = new HashSet<StreamSubscription<dynamic>>();
@@ -22,7 +22,7 @@ class AirQualityModel extends Model {
       subscription.cancel();
   }
 
-  void _handler(AirQuality value) {
+  void _handler(MeasurementPacket value) {
     if (value == null)
       return;
     log(value.toString());
