@@ -14,6 +14,7 @@ import 'src/remy_messages_model.dart';
 import 'src/shower_day.dart';
 import 'src/solar.dart';
 import 'src/television_model.dart';
+import 'src/thermostat.dart';
 // import 'src/test_cloudbit.dart';
 
 const String houseSensorsId = '243c201de435';
@@ -93,7 +94,7 @@ Future<Null> main() async {
       customerPassword: credentials.sunPowerCustomerPassword,
       onLog: (String message) { log('sunpower', message); },
     );
-    AirNowAirQualityMonitor airQuality = new AirNowAirQualityMonitor(
+    AirNowAirQualityMonitor airNow = new AirNowAirQualityMonitor(
       apiKey: credentials.airNowApiKey,
       area: new GeoBox(-122.291453,37.306551, -121.946757,37.513806),
       onLog: (String message) { log('airnowapi', message); },
@@ -165,8 +166,24 @@ Future<Null> main() async {
       if (temperature != null)
         log('thermostat', '$temperature');
     });
+    thermostat.status.listen((ThermostatStatus status) {
+      switch (status) {
+        case ThermostatStatus.heating: log('thermostat', 'heating...'); break;
+        case ThermostatStatus.cooling: log('thermostat', 'cooling...'); break;
+        case ThermostatStatus.fan: log('thermostat', 'fan enabled'); break;
+        case ThermostatStatus.idle: log('thermostat', 'idle'); break;
+      }
+    });
 
     // MODELS
+
+    HouseSensorsModel houseSensors = new HouseSensorsModel(
+      await cloudbits.getDevice(houseSensorsId),
+      remy,
+      messageCenter,
+      tts,
+      onLog: (String message) { log('house sensors', message); },
+    );
 
     List<Model> models = <Model>[
       new LaundryRoomModel(
@@ -174,13 +191,6 @@ Future<Null> main() async {
         remy,
         tts,
         onLog: (String message) { log('laundry', message); },
-      ),
-      new HouseSensorsModel(
-        await cloudbits.getDevice(houseSensorsId),
-        remy,
-        messageCenter,
-        tts,
-        onLog: (String message) { log('house sensors', message); },
       ),
       new SolarModel(
         await cloudbits.getDevice(solarDisplayId),
@@ -190,10 +200,11 @@ Future<Null> main() async {
         onLog: (String message) { log('solar', message); },
       ),
       new OutsideAirQualityModel(
-        airQuality,
+        airNow,
         remy,
         onLog: (String message) { log('outside air quality', message); },
       ),
+      houseSensors,
       new ShowerDayModel(
         await cloudbits.getDevice(showerDayId),
         remy,
@@ -213,6 +224,17 @@ Future<Null> main() async {
         messageCenter,
         remy,
         onLog: (String message) { log('remy messages', message); },
+      ),
+      new ThermostatModel(
+        thermostat,
+        remy,
+        houseSensors,
+        outdoorAirQuality: airNow.dataStream,
+        indoorAirQuality: familyRoomURadMonitor.dataStream,
+        upstairsTemperature: masterBedroomTemperature.temperature,
+        downstairsTemperature: familyRoomTemperature.temperature,
+        rackTemperature: rackTemperature.temperature,
+        onLog: (String message) { log('thermostat model', message); },
       ),
       // new TestCloudbitModel(
       //   await cloudbits.getDevice(testCloudbitId),

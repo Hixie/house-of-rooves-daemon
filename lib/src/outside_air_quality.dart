@@ -8,7 +8,7 @@ import 'common.dart';
 
 class OutsideAirQualityModel extends Model {
   OutsideAirQualityModel(this.dataSource, this.remy, { LogCallback onLog }) : super(onLog: onLog) {
-    _subscriptions.add(dataSource.value.listen(_handler));
+    _subscriptions.add(dataSource.dataStream.listen(_handler));
     log('model initialised');
   }
 
