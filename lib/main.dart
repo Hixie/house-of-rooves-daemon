@@ -146,34 +146,34 @@ Future<Null> main() async {
     );
     await remy.ready;
 
-    rackTemperature.temperature.listen((Temperature temperature) {
-      if (temperature != null)
-        log('1w-temp', '(rack) ${temperature.toStringAsCelsius()}');
-    });
-    masterBedroomTemperature.temperature.listen((Temperature temperature) {
-      if (temperature != null)
-        log('1w-temp', '(master bedroom) ${temperature.toStringAsCelsius()}');
-    });
-    familyRoomTemperature.temperature.listen((Temperature temperature) {
-      if (temperature != null)
-        log('1w-temp', '(family room) ${temperature.toStringAsCelsius()}');
-    });
-    familyRoomURadMonitor.dataStream.listen((MeasurementPacket measurements) {
-      if (measurements != null)
-        log('uradmonitor', '(family room) $measurements');
-    });
-    thermostat.temperature.listen((Temperature temperature) {
-      if (temperature != null)
-        log('thermostat', '$temperature');
-    });
-    thermostat.status.listen((ThermostatStatus status) {
-      switch (status) {
-        case ThermostatStatus.heating: log('thermostat', 'heating...'); break;
-        case ThermostatStatus.cooling: log('thermostat', 'cooling...'); break;
-        case ThermostatStatus.fan: log('thermostat', 'fan enabled'); break;
-        case ThermostatStatus.idle: log('thermostat', 'idle'); break;
-      }
-    });
+    // rackTemperature.temperature.listen((Temperature temperature) {
+    //   if (temperature != null)
+    //     log('1w-temp', '(rack) ${temperature.toStringAsCelsius()}');
+    // });
+    // masterBedroomTemperature.temperature.listen((Temperature temperature) {
+    //   if (temperature != null)
+    //     log('1w-temp', '(master bedroom) ${temperature.toStringAsCelsius()}');
+    // });
+    // familyRoomTemperature.temperature.listen((Temperature temperature) {
+    //   if (temperature != null)
+    //     log('1w-temp', '(family room) ${temperature.toStringAsCelsius()}');
+    // });
+    // familyRoomURadMonitor.dataStream.listen((MeasurementPacket measurements) {
+    //   if (measurements != null)
+    //     log('uradmonitor', '(family room) $measurements');
+    // });
+    // thermostat.temperature.listen((Temperature temperature) {
+    //   if (temperature != null)
+    //     log('thermostat', '$temperature');
+    // });
+    // thermostat.status.listen((ThermostatStatus status) {
+    //   switch (status) {
+    //     case ThermostatStatus.heating: log('thermostat', 'heating...'); break;
+    //     case ThermostatStatus.cooling: log('thermostat', 'cooling...'); break;
+    //     case ThermostatStatus.fan: log('thermostat', 'fan enabled'); break;
+    //     case ThermostatStatus.idle: log('thermostat', 'idle'); break;
+    //   }
+    // });
 
     // MODELS
 

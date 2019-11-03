@@ -7,11 +7,19 @@ import 'common.dart';
 import 'house_sensors.dart';
 
 // TODO(ianh): maybe outside temperature should affect targets?
+// TODO(ianh): if target is upstairs and downstairs is already in range, just fan
+// TODO(ianh): move lockout logic to remy
+// TODO(ianh): need a way to turn to auto-unoccupied mode when we're absent
 
-const double overrideDelta = 2.0; // Celsius degrees for override modes
-const double marginDelta = 0.9; // Celsius degrees for how far to overshoot when heating or cooling
+const double overrideDelta = 1.5; // Celsius degrees for override modes
+const double marginDelta = 0.5; // Celsius degrees for how far to overshoot when heating or cooling
 
-const bool verbose = true;
+enum ThermostatOverride { heating, cooling, fan, quiet }
+
+const Duration lockoutDuration = const Duration(hours: 1);
+enum ThermostatLockoutOperation { heating, cooling }
+
+const bool verbose = false;
 
 abstract class _ThermostatModelState {
   const _ThermostatModelState();
@@ -41,7 +49,7 @@ class _RackOverheat extends _ThermostatModelState {
   }
 
   @override
-  String get description => 'Emergency cooling; rack overheat detected.';
+  String get description => 'emergency cooling; rack overheat detected';
 
   @override
   String get remyMode => 'RackCool';
@@ -57,7 +65,7 @@ class _DoorsOpen extends _ThermostatModelState {
   }
 
   @override
-  String get description => 'Disabling heating and cooling; external door(s) open.';
+  String get description => 'disabling heating and cooling; external door(s) open';
 
   @override
   String get remyMode => 'DoorsOff';
@@ -75,7 +83,7 @@ class _Heating extends _ThermostatModelState {
   }
 
   @override
-  String get description => 'Heating to $target...';
+  String get description => 'heating to $target...';
 
   @override
   int get hashCode => hashValues(runtimeType, target);
@@ -104,7 +112,7 @@ class _Cooling extends _ThermostatModelState {
   }
 
   @override
-  String get description => 'Cooling to $target...';
+  String get description => 'cooling to $target...';
 
   @override
   int get hashCode => hashValues(runtimeType, target);
@@ -131,7 +139,7 @@ class _ForceHeating extends _ThermostatModelState {
   }
 
   @override
-  String get description => 'Heating due to override with no regime...';
+  String get description => 'heating due to override with no regime...';
 
   @override
   String get remyMode => 'Heat';
@@ -147,7 +155,7 @@ class _ForceCooling extends _ThermostatModelState {
   }
 
   @override
-  String get description => 'Cooling due to override with no regime...';
+  String get description => 'cooling due to override with no regime...';
 
   @override
   String get remyMode => 'Cool';
@@ -167,7 +175,7 @@ class _ForceFan extends _Fan {
   const _ForceFan();
 
   @override
-  String get description => 'Circulating air due to override...';
+  String get description => 'circulating air due to override...';
 
   @override
   String get remyMode => 'Fan';
@@ -177,7 +185,7 @@ class _CleaningFan extends _Fan {
   const _CleaningFan();
 
   @override
-  String get description => 'Circulating air due to high indoor particulate matter levels...';
+  String get description => 'circulating air due to high indoor particulate matter levels...';
 
   @override
   String get remyMode => 'PM25Fan';
@@ -187,7 +195,7 @@ class _Idle extends _ThermostatModelState {
   const _Idle();
 
   @override
-  String get description => 'Idle.';
+  String get description => 'idle';
 
   @override
   String get remyMode => 'Idle';
@@ -203,7 +211,23 @@ class _ForceIdle extends _ThermostatModelState {
   const _ForceIdle();
 
   @override
-  String get description => 'Idle due to override with no regime.';
+  String get description => 'idle due to override with no regime';
+
+  @override
+  String get remyMode => 'Idle';
+
+  @override
+  void configureThermostat(Thermostat thermostat) {
+    thermostat.setLeds(red: false, yellow: true, green: false);
+    thermostat.auto(occupied: false);
+  }
+}
+
+class _BlindIdle extends _ThermostatModelState {
+  const _BlindIdle();
+
+  @override
+  String get description => 'idle due to insufficient data';
 
   @override
   String get remyMode => 'Idle';
@@ -260,7 +284,13 @@ class ThermostatRegime {
   String toString() => '$description ($start to $end; temperature range $minimum .. $maximum)';
 }
 
-enum ThermostatOverride { heating, cooling, fan, quiet }
+class _ThermostatModelStateDescription {
+  _ThermostatModelStateDescription(this.state, this.why);
+
+  final _ThermostatModelState state;
+
+  final String why;
+}
 
 class ThermostatModel extends Model {
   ThermostatModel(this.thermostat, this.remy, this.houseSensors, {
@@ -319,7 +349,7 @@ class ThermostatModel extends Model {
     ),
     new ThermostatRegime(
       new DayTime(09, 30), new DayTime(21, 30),
-      new TargetTemperature(23.0), new TargetTemperature(26.0),
+      new TargetTemperature(22.5), new TargetTemperature(26.0),
       TemperatureSource.downstairs,
       'day time'
     ),
@@ -341,6 +371,8 @@ class ThermostatModel extends Model {
   ThermostatRegime _regimeAtOverrideTime;
   ThermostatRegime _currentRegime;
   _ThermostatModelState _currentState;
+  ThermostatLockoutOperation _lockout;
+  DateTime _lockoutStart;
 
   void dispose() {
     for (StreamSubscription<bool> subscription in _subscriptions)
@@ -367,11 +399,30 @@ class ThermostatModel extends Model {
     return state.value;
   }
 
-  _ThermostatModelState computeMode() {
+  static String _describeDoor(CurrentValue<bool> state, String name) {
+    StringBuffer buffer = new StringBuffer('$name door is ');
+    if (state.value == null) {
+      buffer.write('in an unknown state');
+    } else if (state.value) {
+      buffer.write('open');
+    } else {
+      buffer.write('closed');
+    }
+    return buffer.toString();
+  }
+
+  bool _lockedOut(ThermostatLockoutOperation wantedMode) {
+    return _lockoutStart != null
+        && _lockout != null
+        && _lockout != wantedMode
+        && new DateTime.now().difference(_lockoutStart) < lockoutDuration;
+  }
+
+  _ThermostatModelStateDescription computeMode() {
     if (_exceeds(_currentRackTemperature, new TargetTemperature(40.0)))
-      return const _RackOverheat();
+      return new _ThermostatModelStateDescription(const _RackOverheat(), 'rack is at $_currentRackTemperature');
     if (_isTrue(_currentFrontDoorState) || _isTrue(_currentBackDoorState))
-      return const _DoorsOpen();
+      return new _ThermostatModelStateDescription(const _DoorsOpen(), '${_describeDoor(_currentFrontDoorState, 'front')}, ${_describeDoor(_currentBackDoorState, 'back')}');
     final DayTime now = new DayTime.fromDateTime(new DateTime.now());
     final ThermostatRegime regime = schedule.firstWhere(
       (ThermostatRegime candidate) => candidate.isApplicable(now),
@@ -383,7 +434,9 @@ class ThermostatModel extends Model {
     }
     Temperature minimum, maximum, currentTemperature;
     bool ensureFan = false;
+    String regimeAdjective = '';
     if (regime != null) {
+      regimeAdjective = '${regime.description} ';
       minimum = regime.minimum;
       maximum = regime.maximum;
       switch (regime.source) {
@@ -394,6 +447,7 @@ class ThermostatModel extends Model {
           break;
         case TemperatureSource.downstairs:
           currentTemperature = _currentDownstairsTemperature.value;
+          if (verbose)
             log('using downstairs temperature (currently $currentTemperature)');
           break;
       }
@@ -413,13 +467,15 @@ class ThermostatModel extends Model {
             log('entered new thermostat regime since override request; canceling override.');
             _disableOverride();
           } else if (minimum == null) {
-            return new _ForceHeating();
+            return new _ThermostatModelStateDescription(new _ForceHeating(), 'no temperature available; heating override selected');
           } else if (_temperatureAtOverrideTime != null) {
             minimum = _temperatureAtOverrideTime.correct(overrideDelta);
             if (maximum < minimum)
               maximum = minimum.correct(overrideDelta);
+            regimeAdjective = 'override ';
           } else {
             minimum = minimum.correct(overrideDelta);
+            regimeAdjective = 'overridden $regimeAdjective';
           }
           break;
         case ThermostatOverride.cooling:
@@ -431,13 +487,15 @@ class ThermostatModel extends Model {
             log('entered new thermostat regime since override request; canceling override.');
             _disableOverride();
           } else if (maximum == null) {
-            return new _ForceCooling();
+            return new _ThermostatModelStateDescription(new _ForceCooling(), 'no temperature available; cooling override selected');
           } else if (_temperatureAtOverrideTime != null) {
             maximum = _temperatureAtOverrideTime.correct(-overrideDelta);
             if (minimum > maximum)
               minimum = maximum.correct(-overrideDelta);
+            regimeAdjective = 'override ';
           } else {
             maximum = maximum.correct(-overrideDelta);
+            regimeAdjective = 'overridden $regimeAdjective';
           }
           break;
         case ThermostatOverride.fan:
@@ -445,10 +503,20 @@ class ThermostatModel extends Model {
           break;
         case ThermostatOverride.quiet:
           if (minimum == null || maximum == null)
-            return new _ForceIdle();
+            return new _ThermostatModelStateDescription(new _ForceIdle(), 'no regime selected; quiet override active');
           minimum = minimum.correct(-overrideDelta);
           maximum = maximum.correct(overrideDelta);
+          regimeAdjective = 'quiet $regimeAdjective';
           break;
+      }
+    } else {
+      if (_lockedOut(ThermostatLockoutOperation.heating)) {
+        minimum = minimum == null ? new TargetTemperature(18.0) : minimum.correct(-10.0);
+        regimeAdjective = '$regimeAdjective(heating locked out) ';
+      }
+      if (_lockedOut(ThermostatLockoutOperation.cooling)) {
+        maximum = maximum == null ? new TargetTemperature(32.0) : maximum.correct(10.0);
+        regimeAdjective = '$regimeAdjective(cooling locked out) ';
       }
     }
     if (verbose)
@@ -456,31 +524,35 @@ class ThermostatModel extends Model {
     if (minimum != null && maximum != null && currentTemperature != null) {
       assert(minimum < maximum);
       if (currentTemperature < minimum) {
-        return new _Heating(minimum);
+        return new _ThermostatModelStateDescription(new _Heating(minimum.correct(marginDelta)), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum');
       } else if (currentTemperature > maximum) {
-        return new _Cooling(maximum);
+        return new _ThermostatModelStateDescription(new _Cooling(maximum.correct(-marginDelta)), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum');
       } else if (_currentState is _Heating || _currentState is _ForceHeating) {
         if (currentTemperature < minimum.correct(marginDelta))
-          return new _Heating(minimum);
+          return new _ThermostatModelStateDescription(new _Heating(minimum), 'current temperature $currentTemperature; continuing heating until above ${regimeAdjective}$minimum by $marginDelta');
       } else if (_currentState is _Cooling || _currentState is _ForceCooling) {
         if (currentTemperature > maximum.correct(-marginDelta))
-          return new _Cooling(maximum);
+          return new _ThermostatModelStateDescription(new _Cooling(maximum), 'current temperature $currentTemperature; continuing cooling until below ${regimeAdjective}$maximum by $marginDelta');
       }
     }
     if (ensureFan)
-      return const _ForceFan();
+      return new _ThermostatModelStateDescription(const _ForceFan(), '$currentTemperature within ${regimeAdjective}thermal regime, but fan override specified');
     if (_currentIndoorsPM2_5.value != null && _currentIndoorsPM2_5.value.value > 10.0)
-      return const _CleaningFan();
-    return const _Idle();
+      return new _ThermostatModelStateDescription(const _CleaningFan(), '$currentTemperature within ${regimeAdjective}thermal regime, but indoor particulate matter is ${_currentIndoorsPM2_5.value}');
+    if (currentTemperature == null)
+      return new _ThermostatModelStateDescription(const _BlindIdle(), 'current temperature not yet available');
+    if (minimum != null && maximum != null)
+      return new _ThermostatModelStateDescription(const _Idle(), '$currentTemperature within ${regimeAdjective}thermal regime $minimum .. $maximum');
+    return new _ThermostatModelStateDescription(const _BlindIdle(), 'no minimum and maximum available in ${regimeAdjective}thermal regime to which to compare current temperature $currentTemperature');
   }
 
   void _processData() {
-    _ThermostatModelState targetState = computeMode();
-    if (targetState != _currentState) {
-      targetState.configureThermostat(thermostat);
-      log('new selected mode: ${targetState.description}');
-      remy.pushButtonById('thermostatMode${targetState.remyMode}');
-      _currentState = targetState;
+    _ThermostatModelStateDescription targetState = computeMode();
+    if (targetState.state != _currentState) {
+      targetState.state.configureThermostat(thermostat);
+      log('new selected mode: ${targetState.state.description} (${targetState.why})');
+      remy.pushButtonById('thermostatTargetMode${targetState.state.remyMode}');
+      _currentState = targetState.state;
     }
   }
 
@@ -494,17 +566,29 @@ class ThermostatModel extends Model {
     }
   }
 
+  bool _needLockout = false;
+
   void _handleThermostatStatus(ThermostatStatus value) {
     if (value == null)
       return;
+    if (_needLockout) {
+      _lockoutStart = new DateTime.now();
+      _needLockout = false;
+    }
     switch (value) {
       case ThermostatStatus.heating:
         log('actual current status: heating');
         remy.pushButtonById('thermostatModeHeat');
+        lockoutOperation = ThermostatLockoutOperation.heating;
+        _lockoutStart = new DateTime.now();
+        _needLockout = true;
         break;
       case ThermostatStatus.cooling:
         log('actual current status: cooling');
         remy.pushButtonById('thermostatModeCool');
+        lockoutOperation = ThermostatLockoutOperation.cooling;
+        _lockoutStart = new DateTime.now();
+        _needLockout = true;
         break;
       case ThermostatStatus.fan:
         log('actual current status: fan active');
