@@ -11,13 +11,18 @@ import 'house_sensors.dart';
 // TODO(ianh): move lockout logic to remy
 // TODO(ianh): need a way to turn to auto-unoccupied mode when we're absent
 
-const double overrideDelta = 1.5; // Celsius degrees for override modes
+const double overrideDelta = 0.75; // Celsius degrees for override modes
 const double marginDelta = 0.5; // Celsius degrees for how far to overshoot when heating or cooling
+const double thermostatCorrection = -1.0; // Celsius degrees for correcting the Thermostat's temperature
+const double uRADMonitorCorrection = -4.0; // Celsius degrees for correcting the uRADMonitor's temperature
 
 enum ThermostatOverride { heating, cooling, fan, quiet }
 
 const Duration lockoutDuration = const Duration(hours: 1);
 enum ThermostatLockoutOperation { heating, cooling }
+
+const Duration temperatureUpdatePeriod = const Duration(minutes: 30);
+const Duration temperatureLifetime = const Duration(minutes: 15); // after 15 minutes we assume the data is obsolete
 
 const bool verbose = false;
 
@@ -37,6 +42,9 @@ abstract class _ThermostatModelState {
   bool operator ==(dynamic other) {
     return other.runtimeType == runtimeType;
   }
+
+  @override
+  String toString() => description;
 }
 
 class _RackOverheat extends _ThermostatModelState {
@@ -259,7 +267,7 @@ class DayTime {
 }
 
 class ThermostatRegime {
-  ThermostatRegime(this.start, this.end, this.minimum, this.maximum, this.source, this.description) {
+  ThermostatRegime(this.description, this.start, this.end, this.minimum, this.maximum, this.source) {
     assert(minimum.correct(overrideDelta) < maximum);
   }
   final DayTime start;
@@ -311,18 +319,22 @@ class ThermostatModel extends Model {
     _subscriptions.add(upstairsTemperature.listen(_handleUpstairsTemperature));
     _subscriptions.add(downstairsTemperature.listen(_handleDownstairsTemperature));
     _subscriptions.add(rackTemperature.listen(_handleRackTemperature));
-    _currentRackTemperature = new CurrentValue<Temperature>();
-    _currentIndoorAirQualityTemperature = new CurrentValue<Temperature>();
-    _currentThermostatTemperature = new CurrentValue<Temperature>(fallback: _currentIndoorAirQualityTemperature);
-    _currentDownstairsTemperature = new CurrentValue<Temperature>(fallback: _currentThermostatTemperature);
-    _currentUpstairsTemperature = new CurrentValue<Temperature>(fallback: _currentDownstairsTemperature);
+    _currentRackTemperature = new CurrentValue<Temperature>(lifetime: temperatureLifetime);
+    _currentIndoorAirQualityTemperature = new CurrentValue<Temperature>(lifetime: temperatureLifetime);
+    _currentThermostatTemperature = new CurrentValue<Temperature>(lifetime: temperatureLifetime, fallback: _currentIndoorAirQualityTemperature);
+    _currentDownstairsTemperature = new CurrentValue<Temperature>(lifetime: temperatureLifetime, fallback: _currentThermostatTemperature);
+    _currentUpstairsTemperature = new CurrentValue<Temperature>(lifetime: temperatureLifetime, fallback: _currentDownstairsTemperature);
     _currentIndoorsPM2_5 = new CurrentValue<Measurement>();
     _currentFrontDoorState = new CurrentValue<bool>();
     _currentBackDoorState = new CurrentValue<bool>();
     _currentThermostatOverride = new CurrentValue<ThermostatOverride>();
+    _reportTimer = new Timer(const Duration(seconds: 1), () {
+      _report();
+      _reportTimer = new Timer.periodic(temperatureUpdatePeriod, _report);
+    });
+    log('model initialised');
     _disableOverride();
     _processData();
-    log('model initialised');
   }
 
   final Thermostat thermostat;
@@ -336,22 +348,22 @@ class ThermostatModel extends Model {
 
   static List<ThermostatRegime> schedule = <ThermostatRegime>[
     new ThermostatRegime(
-      new DayTime(21, 30), new DayTime(06, 30),
-      new TargetTemperature(21.0), new TargetTemperature(24.0),
-      TemperatureSource.upstairs,
       'night time',
-    ),
-    new ThermostatRegime(
-      new DayTime(06, 30), new DayTime(09, 30),
-      new TargetTemperature(25.0), new TargetTemperature(28.0),
+      new DayTime(21, 30), new DayTime(06, 30),
+      new TargetTemperature(20.0), new TargetTemperature(24.0),
       TemperatureSource.upstairs,
-      'morning',
     ),
     new ThermostatRegime(
+      'morning',
+      new DayTime(06, 30), new DayTime(09, 30),
+      new TargetTemperature(23.5), new TargetTemperature(26.0),
+      TemperatureSource.upstairs,
+    ),
+    new ThermostatRegime(
+      'day time',
       new DayTime(09, 30), new DayTime(21, 30),
       new TargetTemperature(22.5), new TargetTemperature(26.0),
       TemperatureSource.downstairs,
-      'day time'
     ),
   ];
 
@@ -374,6 +386,8 @@ class ThermostatModel extends Model {
   ThermostatLockoutOperation _lockout;
   DateTime _lockoutStart;
 
+  Timer _reportTimer;
+
   void dispose() {
     for (StreamSubscription<bool> subscription in _subscriptions)
       subscription.cancel();
@@ -385,6 +399,7 @@ class ThermostatModel extends Model {
     _currentFrontDoorState.dispose();
     _currentBackDoorState.dispose();
     _currentThermostatOverride.dispose();
+    _reportTimer.cancel();
   }
 
   static bool _exceeds(CurrentValue<Temperature> temperature, Temperature target) {
@@ -529,10 +544,10 @@ class ThermostatModel extends Model {
         return new _ThermostatModelStateDescription(new _Cooling(maximum.correct(-marginDelta)), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum');
       } else if (_currentState is _Heating || _currentState is _ForceHeating) {
         if (currentTemperature < minimum.correct(marginDelta))
-          return new _ThermostatModelStateDescription(new _Heating(minimum), 'current temperature $currentTemperature; continuing heating until above ${regimeAdjective}$minimum by $marginDelta');
+          return new _ThermostatModelStateDescription(new _Heating(minimum.correct(marginDelta)), 'current temperature $currentTemperature; continuing heating until above ${regimeAdjective}$minimum by $marginDelta');
       } else if (_currentState is _Cooling || _currentState is _ForceCooling) {
         if (currentTemperature > maximum.correct(-marginDelta))
-          return new _ThermostatModelStateDescription(new _Cooling(maximum), 'current temperature $currentTemperature; continuing cooling until below ${regimeAdjective}$maximum by $marginDelta');
+          return new _ThermostatModelStateDescription(new _Cooling(maximum.correct(-marginDelta)), 'current temperature $currentTemperature; continuing cooling until below ${regimeAdjective}$maximum by $marginDelta');
       }
     }
     if (ensureFan)
@@ -579,14 +594,14 @@ class ThermostatModel extends Model {
       case ThermostatStatus.heating:
         log('actual current status: heating');
         remy.pushButtonById('thermostatModeHeat');
-        lockoutOperation = ThermostatLockoutOperation.heating;
+        _lockout = ThermostatLockoutOperation.heating;
         _lockoutStart = new DateTime.now();
         _needLockout = true;
         break;
       case ThermostatStatus.cooling:
         log('actual current status: cooling');
         remy.pushButtonById('thermostatModeCool');
-        lockoutOperation = ThermostatLockoutOperation.cooling;
+        _lockout = ThermostatLockoutOperation.cooling;
         _lockoutStart = new DateTime.now();
         _needLockout = true;
         break;
@@ -604,7 +619,7 @@ class ThermostatModel extends Model {
   void _handleThermostatTemperature(Temperature value) {
     if (value == null)
       return;
-    _currentThermostatTemperature.value = value.correct(-1.0);
+    _currentThermostatTemperature.value = value.correct(thermostatCorrection);
     _processData();
   }
 
@@ -645,7 +660,7 @@ class ThermostatModel extends Model {
   void _handleIndoorAirQuality(MeasurementPacket value) {
     if (value == null)
       return;
-    _currentIndoorAirQualityTemperature.value = value.temperature.correct(-4.0);
+    _currentIndoorAirQualityTemperature.value = value.temperature.correct(uRADMonitorCorrection);
     _currentIndoorsPM2_5.value = value.pm2_5;
     _processData();
   }
@@ -690,6 +705,15 @@ class ThermostatModel extends Model {
       return;
     _currentBackDoorState.value = value;
     _processData();
+  }
+
+  void _report([ Timer timer ]) {
+    String additional = '';
+    if (_currentThermostatOverride.value != null)
+      additional += '; override: ${_currentThermostatOverride.value}';
+    if (_lockedOut(null))
+      additional += '; lockout: $_lockout';
+    log('upstairs=${_currentUpstairsTemperature.value}; downstairs=${_currentDownstairsTemperature.value},${_currentThermostatTemperature.value}+${-thermostatCorrection},${_currentIndoorAirQualityTemperature.value}+${-uRADMonitorCorrection}; rack=${_currentRackTemperature.value}; indoor PM₂.₅: ${_currentIndoorsPM2_5.value}; regime: $_currentRegime; state: $_currentState$additional');
   }
 }
 

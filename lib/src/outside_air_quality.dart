@@ -25,7 +25,8 @@ class OutsideAirQualityModel extends Model {
   void _handler(MeasurementPacket value) {
     if (value == null)
       return;
-    log(value.toString());
+    // Ideally we'd use our own metrics to determine AQI rather than the officially reported AQI metrics, but
+    // for now, all our data sources provide official AQI metrics, so we use those.
     double maxAqi = 0.0;
     int count = 0;
     DateTime now = new DateTime.now();
@@ -38,19 +39,27 @@ class OutsideAirQualityModel extends Model {
       count += 1;
     }
     if (count == 0) {
-      log('no recent data points available');
+      log('no recent data points available ($value)');
       remy.pushButtonById('airQualityUnknown');
     } else {
-      log('collected $count data points with a maximum air quality index of $maxAqi');
+      log('$value  maximum AQI: $maxAqi');
       if (maxAqi < 70.0) {
-        remy.pushButtonById('airQualityGood'); // We allow the range up to 70.0 because the Bay Area just has terrible air and we don't want to always show a warning.
+        // 0-50 is theoretically the "good" range in the US.
+        // In reality the range is relatively optimistic (things are bad before you reach 50).
+        // We allow the range up to 70.0 because the Bay Area just has terrible air and we don't want to always show a warning.
+        remy.pushButtonById('airQualityGood');
       } else if (maxAqi < 100.0) {
+        // Officially 50-100 is "for some pollutants there may be a moderate health concern for a very small number of people".
         remy.pushButtonById('airQualityBad');
       } else if (maxAqi < 150.0) {
+        // Officially 100-150 is "Unhealthy for Sensitive Groups", i.e. anyone who's ill, young, old...
         remy.pushButtonById('airQualityToxic1');
       } else if (maxAqi < 200.0) {
+        // Officially 150-200 is "Everyone may begin to experience some adverse health effects".
         remy.pushButtonById('airQualityToxic2');
       } else {
+        // Officially 200+ is "trigger a health alert signifying that everyone may experience more serious health effects".
+        // Officially 300+ is "trigger health warnings of emergency conditions".
         remy.pushButtonById('airQualityToxic3');
       }
     }

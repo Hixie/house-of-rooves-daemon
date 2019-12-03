@@ -146,34 +146,7 @@ Future<Null> main() async {
     );
     await remy.ready;
 
-    // rackTemperature.temperature.listen((Temperature temperature) {
-    //   if (temperature != null)
-    //     log('1w-temp', '(rack) ${temperature.toStringAsCelsius()}');
-    // });
-    // masterBedroomTemperature.temperature.listen((Temperature temperature) {
-    //   if (temperature != null)
-    //     log('1w-temp', '(master bedroom) ${temperature.toStringAsCelsius()}');
-    // });
-    // familyRoomTemperature.temperature.listen((Temperature temperature) {
-    //   if (temperature != null)
-    //     log('1w-temp', '(family room) ${temperature.toStringAsCelsius()}');
-    // });
-    // familyRoomURadMonitor.dataStream.listen((MeasurementPacket measurements) {
-    //   if (measurements != null)
-    //     log('uradmonitor', '(family room) $measurements');
-    // });
-    // thermostat.temperature.listen((Temperature temperature) {
-    //   if (temperature != null)
-    //     log('thermostat', '$temperature');
-    // });
-    // thermostat.status.listen((ThermostatStatus status) {
-    //   switch (status) {
-    //     case ThermostatStatus.heating: log('thermostat', 'heating...'); break;
-    //     case ThermostatStatus.cooling: log('thermostat', 'cooling...'); break;
-    //     case ThermostatStatus.fan: log('thermostat', 'fan enabled'); break;
-    //     case ThermostatStatus.idle: log('thermostat', 'idle'); break;
-    //   }
-    // });
+    familyRoomURadMonitor.dataStream.listen(_reportMeasurements);
 
     // MODELS
 
@@ -252,5 +225,17 @@ Future<Null> main() async {
 
   } catch (error, stack) {
     log('system', '$error\n$stack');
+  }
+}
+
+Stopwatch _reportWatch;
+
+void _reportMeasurements(MeasurementPacket measurements) {
+  if (measurements != null) {
+    if (_reportWatch == null || _reportWatch.elapsed > const Duration(minutes: 30)) {
+      _reportWatch = new Stopwatch()..start();
+      _reportWatch.reset();
+      log('indoor air quality', '$measurements');
+    }
   }
 }
