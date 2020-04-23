@@ -18,13 +18,34 @@ const double uRADMonitorCorrection = -4.0; // Celsius degrees for correcting the
 
 enum ThermostatOverride { heating, cooling, fan, quiet }
 
-const Duration lockoutDuration = const Duration(hours: 1);
+const Duration lockoutDuration = const Duration(hours: 1, minutes: 30);
 enum ThermostatLockoutOperation { heating, cooling }
 
 const Duration temperatureUpdatePeriod = const Duration(minutes: 30);
 const Duration temperatureLifetime = const Duration(minutes: 15); // after 15 minutes we assume the data is obsolete
 
 const bool verbose = false;
+
+final List<ThermostatRegime> schedule = <ThermostatRegime>[
+  new ThermostatRegime(
+    'night time',
+    new DayTime(22, 30), new DayTime(06, 30),
+    new TargetTemperature(20.0), new TargetTemperature(24.0),
+    TemperatureSource.upstairs,
+  ),
+  new ThermostatRegime(
+    'morning',
+    new DayTime(06, 30), new DayTime(09, 30),
+    new TargetTemperature(23.5), new TargetTemperature(26.0),
+    TemperatureSource.upstairs,
+  ),
+  new ThermostatRegime(
+    'day time',
+    new DayTime(09, 30), new DayTime(22, 30),
+    new TargetTemperature(22.0), new TargetTemperature(26.0),
+    TemperatureSource.downstairs,
+  ),
+];
 
 abstract class _ThermostatModelState {
   const _ThermostatModelState();
@@ -346,27 +367,6 @@ class ThermostatModel extends Model {
   final Stream<Temperature> upstairsTemperature;
   final Stream<Temperature> rackTemperature;
 
-  static List<ThermostatRegime> schedule = <ThermostatRegime>[
-    new ThermostatRegime(
-      'night time',
-      new DayTime(21, 30), new DayTime(06, 30),
-      new TargetTemperature(20.0), new TargetTemperature(24.0),
-      TemperatureSource.upstairs,
-    ),
-    new ThermostatRegime(
-      'morning',
-      new DayTime(06, 30), new DayTime(09, 30),
-      new TargetTemperature(23.5), new TargetTemperature(26.0),
-      TemperatureSource.upstairs,
-    ),
-    new ThermostatRegime(
-      'day time',
-      new DayTime(09, 30), new DayTime(21, 30),
-      new TargetTemperature(22.5), new TargetTemperature(26.0),
-      TemperatureSource.downstairs,
-    ),
-  ];
-
   Set<StreamSubscription<dynamic>> _subscriptions = new HashSet<StreamSubscription<dynamic>>();
 
   CurrentValue<Temperature> _currentRackTemperature;
@@ -427,6 +427,8 @@ class ThermostatModel extends Model {
   }
 
   bool _lockedOut(ThermostatLockoutOperation wantedMode) {
+    if (_lockoutStart == null)
+      return false;
     return _lockoutStart != null
         && _lockout != null
         && _lockout != wantedMode
@@ -467,6 +469,7 @@ class ThermostatModel extends Model {
           break;
       }
     }
+    bool ignoreLockouts = false;
     if (_currentThermostatOverride.value != null) {
       if (_temperatureAtOverrideTime == null)
         _temperatureAtOverrideTime = currentTemperature;
@@ -483,14 +486,17 @@ class ThermostatModel extends Model {
             _disableOverride();
           } else if (minimum == null) {
             return new _ThermostatModelStateDescription(new _ForceHeating(), 'no temperature available; heating override selected');
-          } else if (_temperatureAtOverrideTime != null) {
-            minimum = _temperatureAtOverrideTime.correct(overrideDelta);
-            if (maximum < minimum)
-              maximum = minimum.correct(overrideDelta);
-            regimeAdjective = 'override ';
           } else {
-            minimum = minimum.correct(overrideDelta);
-            regimeAdjective = 'overridden $regimeAdjective';
+            if (_temperatureAtOverrideTime != null) {
+              minimum = _temperatureAtOverrideTime.correct(overrideDelta);
+              if (maximum < minimum)
+                maximum = minimum.correct(overrideDelta);
+              regimeAdjective = 'override ';
+            } else {
+              minimum = minimum.correct(overrideDelta);
+              regimeAdjective = 'overridden $regimeAdjective';
+            }
+            ignoreLockouts = true;
           }
           break;
         case ThermostatOverride.cooling:
@@ -503,14 +509,17 @@ class ThermostatModel extends Model {
             _disableOverride();
           } else if (maximum == null) {
             return new _ThermostatModelStateDescription(new _ForceCooling(), 'no temperature available; cooling override selected');
-          } else if (_temperatureAtOverrideTime != null) {
-            maximum = _temperatureAtOverrideTime.correct(-overrideDelta);
-            if (minimum > maximum)
-              minimum = maximum.correct(-overrideDelta);
-            regimeAdjective = 'override ';
           } else {
-            maximum = maximum.correct(-overrideDelta);
-            regimeAdjective = 'overridden $regimeAdjective';
+            if (_temperatureAtOverrideTime != null) {
+              maximum = _temperatureAtOverrideTime.correct(-overrideDelta);
+              if (minimum > maximum)
+                minimum = maximum.correct(-overrideDelta);
+              regimeAdjective = 'override ';
+            } else {
+              maximum = maximum.correct(-overrideDelta);
+              regimeAdjective = 'overridden $regimeAdjective';
+            }
+            ignoreLockouts = true;
           }
           break;
         case ThermostatOverride.fan:
@@ -524,7 +533,8 @@ class ThermostatModel extends Model {
           regimeAdjective = 'quiet $regimeAdjective';
           break;
       }
-    } else {
+    }
+    if (!ignoreLockouts) {
       if (_lockedOut(ThermostatLockoutOperation.heating)) {
         minimum = minimum == null ? new TargetTemperature(18.0) : minimum.correct(-10.0);
         regimeAdjective = '$regimeAdjective(heating locked out) ';
@@ -535,7 +545,7 @@ class ThermostatModel extends Model {
       }
     }
     if (verbose)
-      log('minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature');
+      log('minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
     if (minimum != null && maximum != null && currentTemperature != null) {
       assert(minimum < maximum);
       if (currentTemperature < minimum) {
