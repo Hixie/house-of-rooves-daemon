@@ -119,25 +119,25 @@ Future<Null> main() async {
       username: credentials.thermostatUsername,
       password: credentials.thermostatPassword,
       onLog: (String message) { log('thermostat', message); },
-      onError: (dynamic error) { log('thermostat', error.toString()); },
+      onError: (dynamic error) async { log('thermostat', error.toString()); },
     );
     OneWireTemperature rackTemperature = new OneWireTemperature(
       id: rackThermometerId,
       station: new MeasurementStation(siteName: 'rack thermometer'),
       onLog: (String message) { log('1w-temp', '(rack) $message'); },
-      onError: (dynamic error) { log('1w-temp', '(rack) $error'); },
+      onError: (dynamic error) async { log('1w-temp', '(rack) $error'); },
     );
     OneWireTemperature masterBedroomTemperature = new OneWireTemperature(
       id: masterBedroomThermometerId,
       station: new MeasurementStation(siteName: 'master bedroom thermometer'),
       onLog: (String message) { log('1w-temp', '(master bedroom) $message'); },
-      onError: (dynamic error) { log('1w-temp', '(master bedroom) $error'); },
+      onError: (dynamic error) async { log('1w-temp', '(master bedroom) $error'); },
     );
     OneWireTemperature familyRoomTemperature = new OneWireTemperature(
       id: familyRoomThermometerId,
       station: new MeasurementStation(siteName: 'family room thermometer'),
       onLog: (String message) { log('1w-temp', '(family room) $message'); },
-      onError: (dynamic error) { log('1w-temp', '(family room) $error'); },
+      onError: (dynamic error) async { log('1w-temp', '(family room) $error'); },
     );
     URadMonitor familyRoomURadMonitor = new URadMonitor(
       host: 'uradmonitor-family-room.rooves.house',

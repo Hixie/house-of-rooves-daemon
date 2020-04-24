@@ -312,7 +312,7 @@ class MessageCenter extends Model {
     if (_updateScheduled)
       return;
     _updater?.cancel();
-    _updater = new Timer(Duration.ZERO, _update);
+    _updater = new Timer(Duration.zero, _update);
     _updateScheduled = true;
   }
 
