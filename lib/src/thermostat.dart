@@ -29,8 +29,14 @@ const bool verbose = false;
 final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
     'night time',
-    new DayTime(22, 30), new DayTime(06, 30),
-    new TargetTemperature(20.0), new TargetTemperature(24.0),
+    new DayTime(22, 30), new DayTime(05, 30),
+    new TargetTemperature(20.0), new TargetTemperature(22.0),
+    TemperatureSource.upstairs,
+  ),
+  new ThermostatRegime(
+    'early morning',
+    new DayTime(05, 30), new DayTime(06, 30),
+    new TargetTemperature(22.0), new TargetTemperature(26.0),
     TemperatureSource.upstairs,
   ),
   new ThermostatRegime(
@@ -42,7 +48,7 @@ final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
     'day time',
     new DayTime(09, 30), new DayTime(22, 30),
-    new TargetTemperature(22.0), new TargetTemperature(26.0),
+    new TargetTemperature(22.0), new TargetTemperature(24.0),
     TemperatureSource.downstairs,
   ),
 ];
