@@ -10,13 +10,14 @@ import 'house_sensors.dart';
 // TODO(ianh): if target is upstairs and downstairs is already in range, just fan
 // TODO(ianh): move lockout logic to remy
 // TODO(ianh): need a way to turn to auto-unoccupied mode when we're absent
+// TODO(ianh): add a 20 second back-off to the door override
 
 const double overrideDelta = 0.75; // Celsius degrees for override modes
 const double marginDelta = 0.5; // Celsius degrees for how far to overshoot when heating or cooling
 const double thermostatCorrection = -1.0; // Celsius degrees for correcting the Thermostat's temperature
 const double uRADMonitorCorrection = -4.0; // Celsius degrees for correcting the uRADMonitor's temperature
 
-enum ThermostatOverride { heating, cooling, fan, quiet }
+enum ThermostatOverride { heating, cooling, fan, quiet, alwaysHeat, alwaysCool, alwaysFan, alwaysOff }
 
 const Duration lockoutDuration = const Duration(hours: 1, minutes: 30);
 enum ThermostatLockoutOperation { heating, cooling }
@@ -30,7 +31,7 @@ final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
     'night time',
     new DayTime(22, 30), new DayTime(05, 30),
-    new TargetTemperature(20.0), new TargetTemperature(22.0),
+    new TargetTemperature(20.0), new TargetTemperature(23.0),
     TemperatureSource.upstairs,
   ),
   new ThermostatRegime(
@@ -88,6 +89,70 @@ class _RackOverheat extends _ThermostatModelState {
 
   @override
   String get remyMode => 'RackCool';
+}
+
+class _MaintenanceModeHeat extends _ThermostatModelState {
+  const _MaintenanceModeHeat();
+
+  @override
+  void configureThermostat(Thermostat thermostat) {
+    thermostat.setLeds(red: true, yellow: false, green: false);
+    thermostat.heat();
+  }
+
+  @override
+  String get description => 'maintenance mode forced heating';
+
+  @override
+  String get remyMode => 'Maintenance';
+}
+
+class _MaintenanceModeCool extends _ThermostatModelState {
+  const _MaintenanceModeCool();
+
+  @override
+  void configureThermostat(Thermostat thermostat) {
+    thermostat.setLeds(red: true, yellow: false, green: false);
+    thermostat.cool();
+  }
+
+  @override
+  String get description => 'maintenance mode forced cooling';
+
+  @override
+  String get remyMode => 'Maintenance';
+}
+
+class _MaintenanceModeFan extends _ThermostatModelState {
+  const _MaintenanceModeFan();
+
+  @override
+  void configureThermostat(Thermostat thermostat) {
+    thermostat.setLeds(red: true, yellow: false, green: false);
+    thermostat.fan();
+  }
+
+  @override
+  String get description => 'maintenance mode forced faning';
+
+  @override
+  String get remyMode => 'Maintenance';
+}
+
+class _MaintenanceModeOff extends _ThermostatModelState {
+  const _MaintenanceModeOff();
+
+  @override
+  void configureThermostat(Thermostat thermostat) {
+    thermostat.setLeds(red: true, yellow: false, green: false);
+    thermostat.off();
+  }
+
+  @override
+  String get description => 'maintenance mode forced off';
+
+  @override
+  String get remyMode => 'Maintenance';
 }
 
 class _DoorsOpen extends _ThermostatModelState {
@@ -442,10 +507,24 @@ class ThermostatModel extends Model {
   }
 
   _ThermostatModelStateDescription computeMode() {
-    if (_exceeds(_currentRackTemperature, new TargetTemperature(40.0)))
-      return new _ThermostatModelStateDescription(const _RackOverheat(), 'rack is at $_currentRackTemperature');
-    if (_isTrue(_currentFrontDoorState) || _isTrue(_currentBackDoorState))
-      return new _ThermostatModelStateDescription(const _DoorsOpen(), '${_describeDoor(_currentFrontDoorState, 'front')}, ${_describeDoor(_currentBackDoorState, 'back')}');
+    // First the overrides
+    switch (_currentThermostatOverride.value) {
+      case ThermostatOverride.alwaysHeat:
+        return new _ThermostatModelStateDescription(const _MaintenanceModeHeat(), 'maintenance mode override to heat');
+      case ThermostatOverride.alwaysCool:
+        return new _ThermostatModelStateDescription(const _MaintenanceModeCool(), 'maintenance mode override to cool');
+      case ThermostatOverride.alwaysFan:
+        return new _ThermostatModelStateDescription(const _MaintenanceModeFan(), 'maintenance mode override to fan');
+      case ThermostatOverride.alwaysOff:
+        return new _ThermostatModelStateDescription(const _MaintenanceModeOff(), 'maintenance mode override to off');
+      default:
+        if (_exceeds(_currentRackTemperature, new TargetTemperature(40.0)))
+          return new _ThermostatModelStateDescription(const _RackOverheat(), 'rack is at $_currentRackTemperature');
+        if (_isTrue(_currentFrontDoorState) || _isTrue(_currentBackDoorState))
+          return new _ThermostatModelStateDescription(const _DoorsOpen(), '${_describeDoor(_currentFrontDoorState, 'front')}, ${_describeDoor(_currentBackDoorState, 'back')}');
+        break;
+    }
+    // None of the overrides apply, so now let's consider the current regime.
     final DayTime now = new DayTime.fromDateTime(new DateTime.now());
     final ThermostatRegime regime = schedule.firstWhere(
       (ThermostatRegime candidate) => candidate.isApplicable(now),
@@ -538,6 +617,8 @@ class ThermostatModel extends Model {
           maximum = maximum.correct(overrideDelta);
           regimeAdjective = 'quiet $regimeAdjective';
           break;
+        default:
+          assert(false);
       }
     }
     if (!ignoreLockouts) {
@@ -654,6 +735,18 @@ class ThermostatModel extends Model {
         break;
       case 'quiet':
         _currentThermostatOverride.value = ThermostatOverride.quiet;
+        break;
+      case 'alwaysHeat':
+        _currentThermostatOverride.value = ThermostatOverride.alwaysHeat;
+        break;
+      case 'alwaysCool':
+        _currentThermostatOverride.value = ThermostatOverride.alwaysCool;
+        break;
+      case 'alwaysFan':
+        _currentThermostatOverride.value = ThermostatOverride.alwaysFan;
+        break;
+      case 'alwaysOff':
+        _currentThermostatOverride.value = ThermostatOverride.alwaysOff;
         break;
       case 'normal':
         _currentThermostatOverride.value = null;
