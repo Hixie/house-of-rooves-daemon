@@ -3,13 +3,14 @@ import 'dart:io';
 
 import 'package:home_automation_tools/all.dart';
 
+import 'src/air_quality.dart';
 import 'src/common.dart';
 import 'src/credentials.dart';
 import 'src/google_home.dart';
 import 'src/house_sensors.dart';
 import 'src/laundry.dart';
+import 'src/leak_monitor.dart';
 import 'src/message_center.dart';
-import 'src/outside_air_quality.dart';
 import 'src/remy_messages_model.dart';
 import 'src/shower_day.dart';
 import 'src/solar.dart';
@@ -144,9 +145,17 @@ Future<Null> main() async {
       station: new MeasurementStation(siteName: 'family room uRADMonitor'),
       onLog: (String message) { log('uradmonitor', '(family room) $message'); },
     );
+    URadMonitor outsideURadMonitor = new URadMonitor(
+      host: 'uradmonitor-outside.rooves.house',
+      station: new MeasurementStation(siteName: 'outside uRADMonitor', outside: true),
+      onLog: (String message) { log('uradmonitor', '(outside) $message'); },
+    );
+    ProcessMonitor leakSensorKitchenSinkMonitor = ProcessMonitor(
+      executable: '/home/ianh/dev/leak-sensor/leak-sensor-monitor',
+      onLog: (String message) { log('leak sensor', '(kitchen sink) $message'); },
+      onError: (dynamic error) async { log('leak sensor', '(kitchen sink) $error'); },
+    );
     await remy.ready;
-
-    familyRoomURadMonitor.dataStream.listen(_reportMeasurements);
 
     // MODELS
 
@@ -172,10 +181,17 @@ Future<Null> main() async {
         messageCenter,
         onLog: (String message) { log('solar', message); },
       ),
-      new OutsideAirQualityModel(
-        airNow,
+      new AirQualityModel(
+        // TODO(ianh): convert the one-wire and thermostat sources to streams of MeasurementPackets and add them here
+        <Stream<MeasurementPacket>>[ airNow.dataStream, familyRoomURadMonitor.dataStream, outsideURadMonitor.dataStream ],
         remy,
-        onLog: (String message) { log('outside air quality', message); },
+        onLog: (String message) { log('air quality', message); },
+      ),
+      new LeakMonitorModel(
+        leakSensorKitchenSinkMonitor,
+        remy,
+        'KitchenSink',
+        onLog: (String message) { log('leak sensor', '(kitchen sink) $message'); },
       ),
       houseSensors,
       new ShowerDayModel(
@@ -202,7 +218,6 @@ Future<Null> main() async {
         thermostat,
         remy,
         houseSensors,
-        outdoorAirQuality: airNow.dataStream,
         indoorAirQuality: familyRoomURadMonitor.dataStream,
         upstairsTemperature: masterBedroomTemperature.temperature,
         downstairsTemperature: familyRoomTemperature.temperature,
@@ -225,17 +240,5 @@ Future<Null> main() async {
 
   } catch (error, stack) {
     log('system', '$error\n$stack');
-  }
-}
-
-Stopwatch _reportWatch;
-
-void _reportMeasurements(MeasurementPacket measurements) {
-  if (measurements != null) {
-    if (_reportWatch == null || _reportWatch.elapsed > const Duration(minutes: 30)) {
-      _reportWatch = new Stopwatch()..start();
-      _reportWatch.reset();
-      log('indoor air quality', '$measurements');
-    }
   }
 }

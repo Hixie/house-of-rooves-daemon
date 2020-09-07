@@ -6,11 +6,12 @@ import 'package:home_automation_tools/all.dart';
 import 'common.dart';
 import 'house_sensors.dart';
 
-// TODO(ianh): maybe outside temperature should affect targets?
+// TODO(ianh): on startup, don't reset back to normal unless it's in a temporary heat or cool override mode
+// TODO(ianh): predicted temperature should affect targets (e.g. if it's going to be hot out in the next few hours, don't heat)
 // TODO(ianh): if target is upstairs and downstairs is already in range, just fan
 // TODO(ianh): move lockout logic to remy
 // TODO(ianh): need a way to turn to auto-unoccupied mode when we're absent
-// TODO(ianh): add a 20 second back-off to the door override
+// TODO(ianh): add a 20 second back-off to the door/tv override
 
 const double overrideDelta = 0.75; // Celsius degrees for override modes
 const double marginDelta = 0.5; // Celsius degrees for how far to overshoot when heating or cooling
@@ -394,7 +395,6 @@ class _ThermostatModelStateDescription {
 
 class ThermostatModel extends Model {
   ThermostatModel(this.thermostat, this.remy, this.houseSensors, {
-    this.outdoorAirQuality,
     this.indoorAirQuality,
     this.upstairsTemperature,
     this.downstairsTemperature,
@@ -407,7 +407,6 @@ class ThermostatModel extends Model {
     _subscriptions.add(houseSensors.frontDoor.listen(_handleFrontDoor));
     _subscriptions.add(houseSensors.backDoor.listen(_handleBackDoor));
     _subscriptions.add(indoorAirQuality.listen(_handleIndoorAirQuality));
-    _subscriptions.add(outdoorAirQuality.listen(_handleOutdoorAirQuality));
     _subscriptions.add(upstairsTemperature.listen(_handleUpstairsTemperature));
     _subscriptions.add(downstairsTemperature.listen(_handleDownstairsTemperature));
     _subscriptions.add(rackTemperature.listen(_handleRackTemperature));
@@ -432,7 +431,6 @@ class ThermostatModel extends Model {
   final Thermostat thermostat;
   final RemyMultiplexer remy;
   final HouseSensorsModel houseSensors;
-  final Stream<MeasurementPacket> outdoorAirQuality;
   final Stream<MeasurementPacket> indoorAirQuality;
   final Stream<Temperature> downstairsTemperature;
   final Stream<Temperature> upstairsTemperature;
@@ -662,8 +660,9 @@ class ThermostatModel extends Model {
     _ThermostatModelStateDescription targetState = computeMode();
     if (targetState.state != _currentState) {
       targetState.state.configureThermostat(thermostat);
-      log('new selected mode: ${targetState.state.description} (${targetState.why})');
       remy.pushButtonById('thermostatTargetMode${targetState.state.remyMode}');
+      log('new selected mode: ${targetState.state.description} (${targetState.why})');
+      _report();
       _currentState = targetState.state;
     }
   }
@@ -771,13 +770,6 @@ class ThermostatModel extends Model {
       return;
     _currentIndoorAirQualityTemperature.value = value.temperature.correct(uRADMonitorCorrection);
     _currentIndoorsPM2_5.value = value.pm2_5;
-    _processData();
-  }
-
-  void _handleOutdoorAirQuality(MeasurementPacket value) {
-    if (value == null)
-      return;
-    // track outdoor pm2.5
     _processData();
   }
 
