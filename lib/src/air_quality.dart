@@ -64,10 +64,10 @@ class AirQualityModel extends Model {
         remy.pushButtonById('airQualityUnknown');
       } else {
         log('worst outside air quality measurement is currently ${metricToString(worstParameter.metric)}=$worstParameter at ${worstParameter.station}');
-        if (maxAqi < 50.0) {
+        if (maxAqi < 70.0) {
           // 0-50 is theoretically the "good" range in the US.
           // In reality the range is relatively optimistic (things are bad before you reach 50).
-          // In the past I've allowed up to 70.0 because the Bay Area just has terrible air and we don't want to always show a warning...
+          // We allowed up to 70.0 because the Bay Area just has terrible air and we don't want to always show a warning...
           remy.pushButtonById('airQualityGood');
         } else if (maxAqi < 100.0) {
           // Officially 50-100 is "for some pollutants there may be a moderate health concern for a very small number of people".
