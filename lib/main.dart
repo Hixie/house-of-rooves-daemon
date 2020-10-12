@@ -6,6 +6,7 @@ import 'package:home_automation_tools/all.dart';
 import 'src/air_quality.dart';
 import 'src/common.dart';
 import 'src/credentials.dart';
+import 'src/database/database.dart';
 import 'src/google_home.dart';
 import 'src/house_sensors.dart';
 import 'src/laundry.dart';
@@ -28,6 +29,9 @@ const String showerDayId = '00e04c0355d0'; // was '243c201dcdfd', but that is da
 const String rackThermometerId = '0000074f7305';
 const String masterBedroomThermometerId = '0115722937ff';
 const String familyRoomThermometerId = '0000076b2ff7';
+
+const int databaseWritePort = 7420;
+const int databaseReadPort = 7421;
 
 void log(String module, String s) {
   String timestamp = new DateTime.now().toIso8601String().padRight(26, '0');
@@ -80,7 +84,8 @@ Future<Null> main() async {
           return const LocalCloudBitDeviceDescription('solar display', 'cloudbit-solar.rooves.house');
         if (deviceId == cloudBitTestId)
           return const LocalCloudBitDeviceDescription('cloudbit test device', 'cloudbit-test1.rooves.house');
-        if (deviceId == showerDayId)
+
+if (deviceId == showerDayId)
           return const LocalCloudBitDeviceDescription('shower day display', 'cloudbit-shower.rooves.house');
         // if (deviceId == testCloudbitId)
         //   return const LocalCloudBitDeviceDescription('test', 'cloudbit-test.rooves.house');
@@ -156,6 +161,17 @@ Future<Null> main() async {
       onError: (dynamic error) async { log('leak sensor', '(kitchen sink) $error'); },
     );
     await remy.ready;
+
+    Database database = await Database.connect(
+      readPort: databaseReadPort,
+      writePort: databaseWritePort,
+      certificateChain: await File(credentials.certificatePath).readAsBytes(),
+      privateKey: await File(credentials.privateKeyPath).readAsBytes(),
+      databasePassword: credentials.databasePassword,
+      localDirectory: credentials.localDatabaseDirectory,
+      remoteDirectory: credentials.remoteDatabaseDirectory,
+      onLog: (String message) { log('database', message); },
+    );
 
     // MODELS
 

@@ -44,7 +44,7 @@ final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
     'morning',
     new DayTime(06, 30), new DayTime(09, 30),
-    new TargetTemperature(23.5), new TargetTemperature(26.0),
+    new TargetTemperature(22.0), new TargetTemperature(26.0), // low was 23.5 but that caused heating in summer
     TemperatureSource.upstairs,
   ),
   new ThermostatRegime(
@@ -720,8 +720,7 @@ class ThermostatModel extends Model {
   }
 
   void _handleRemyOverride(String override) {
-    if (verbose)
-      log('received remy thermostat override instruction: $override');
+    log('received remy thermostat override instruction: $override');
     switch (override) {
       case 'heat':
         _currentThermostatOverride.value = ThermostatOverride.heating;

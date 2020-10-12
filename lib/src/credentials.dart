@@ -20,6 +20,11 @@ class Credentials {
   String get thermostatHost => _lines[10];
   String get thermostatUsername => _lines[11];
   String get thermostatPassword => _lines[12];
+  int get databasePassword => int.parse(_lines[13], radix: 16);
+  String get certificatePath => _lines[14];
+  String get privateKeyPath => _lines[15];
+  String get localDatabaseDirectory => _lines[16];
+  String get remoteDatabaseDirectory => _lines[17];
 
-  int get _requiredCount => 12;
+  int get _requiredCount => 18;
 }
