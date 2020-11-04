@@ -111,8 +111,8 @@ class Database {
       }
     } catch (error) {
       log('error: $error on write socket from $client');
-      await socket.close().catchError(() { }); // errors closing sockets don't really matter
     }
+    await socket.close().catchError(() { }); // errors closing sockets don't really matter
   }
 
   int _readConnectionCount = 0;

@@ -28,6 +28,11 @@ class AirQualityModel extends Model {
   Duration _timeBetweenReports = const Duration(seconds: 10);
   static const Duration _maxTimeBetweenReports = const Duration(minutes: 5);
 
+  bool _aqiDiffersSignificantly(AirQualityParameter a, AirQualityParameter b) {
+    double delta = (a.aqi - b.aqi).abs();
+    return delta > 5.0;
+  }
+
   void _handler(MeasurementPacket value) {
     if (value == null)
       return;
@@ -58,16 +63,20 @@ class AirQualityModel extends Model {
       }
     }
     if (_worstParameter != worstParameter) {
-      _worstParameter = worstParameter;
       if (worstParameter == null) {
+        _worstParameter = null;
         log('no recent data points available to determine outside air quality');
         remy.pushButtonById('airQualityUnknown');
-      } else {
+      } else if (_worstParameter == null ||
+                 _worstParameter.station != worstParameter.station ||
+                 _aqiDiffersSignificantly(_worstParameter, worstParameter)) {
+        _worstParameter = worstParameter;
         log('worst outside air quality measurement is currently ${metricToString(worstParameter.metric)}=$worstParameter at ${worstParameter.station}');
         if (maxAqi < 70.0) {
           // 0-50 is theoretically the "good" range in the US.
           // In reality the range is relatively optimistic (things are bad before you reach 50).
-          // We allowed up to 70.0 because the Bay Area just has terrible air and we don't want to always show a warning...
+          // We allowed up to 70.0 because the Bay Area just has terrible air and we don't want to always show a warning.
+          // It's very common for air quality to reach the high sixties.
           remy.pushButtonById('airQualityGood');
         } else if (maxAqi < 100.0) {
           // Officially 50-100 is "for some pollutants there may be a moderate health concern for a very small number of people".
