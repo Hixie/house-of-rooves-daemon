@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:typed_data';
 
 import 'package:home_automation_tools/all.dart';
 
 import 'common.dart';
 import 'message_center.dart';
+import 'database/database.dart';
+import 'database/adaptors.dart';
 
 class HouseSensorsModel extends Model {
   HouseSensorsModel(this._cloudbit, this.remy, this.messageCenter, this.tts, { LogCallback onLog }) : super(onLog: onLog) {
@@ -56,5 +59,68 @@ class HouseSensorsModel extends Model {
   void dispose() {
     for (StreamSubscription<bool> subscription in _subscriptions)
       subscription.cancel();
+  }
+}
+
+class HouseSensorsDataAdaptor extends DataAdaptor {
+  HouseSensorsDataAdaptor({int tableId, this.model}) : assert(model != null), super(tableId);
+
+  final HouseSensorsModel model;
+  Set<StreamSubscription<bool>> _subscriptions = <StreamSubscription<bool>>{};
+
+  @override
+  void start(Database database) {
+    assert(_subscriptions.isEmpty);
+    super.start(database);
+    _subscriptions.add(model.frontDoor.listen(_handleUpdateFrontDoor));
+    _subscriptions.add(model.garageDoor.listen(_handleUpdateGarageDoor));
+    _subscriptions.add(model.backDoor.listen(_handleUpdateBackDoor));
+  }
+
+  bool _frontDoor;
+  bool _garageDoor;
+  bool _backDoor;
+
+  void _handleUpdateFrontDoor(bool bit) {
+    _frontDoor = bit;
+    _handleUpdate();
+  }
+
+  void _handleUpdateGarageDoor(bool bit) {
+    _garageDoor = bit;
+    _handleUpdate();
+  }
+
+  void _handleUpdateBackDoor(bool bit) {
+    _backDoor = bit;
+    _handleUpdate();
+  }
+
+  void _handleUpdate() {
+    if (_frontDoor == null || _garageDoor == null || _backDoor == null) {
+      _debounce(0xFF);
+      return;
+    }
+    int data = (_frontDoor ? 0x01 : 0x00)
+             | (_garageDoor ? 0x02 : 0x00)
+             | (_backDoor ? 0x04 : 0x00);
+    _debounce(data);
+  }
+
+  int _last;
+
+  void _debounce(int next) {
+    if (_last != next) {
+      write(Uint8List.fromList(<int>[next]));
+      _last = next;
+    }
+  }
+
+  @override
+  void end() {
+    for (final StreamSubscription<bool> subscription in _subscriptions)
+      subscription.cancel();
+    _subscriptions.clear();
+    super.end();
   }
 }

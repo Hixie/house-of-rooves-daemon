@@ -7,6 +7,7 @@ import 'src/air_quality.dart';
 import 'src/common.dart';
 import 'src/credentials.dart';
 import 'src/database/database.dart';
+import 'src/database/adaptors.dart';
 import 'src/google_home.dart';
 import 'src/house_sensors.dart';
 import 'src/laundry.dart';
@@ -84,8 +85,7 @@ Future<Null> main() async {
           return const LocalCloudBitDeviceDescription('solar display', 'cloudbit-solar.rooves.house');
         if (deviceId == cloudBitTestId)
           return const LocalCloudBitDeviceDescription('cloudbit test device', 'cloudbit-test1.rooves.house');
-
-if (deviceId == showerDayId)
+        if (deviceId == showerDayId)
           return const LocalCloudBitDeviceDescription('shower day display', 'cloudbit-shower.rooves.house');
         // if (deviceId == testCloudbitId)
         //   return const LocalCloudBitDeviceDescription('test', 'cloudbit-test.rooves.house');
@@ -172,10 +172,11 @@ if (deviceId == showerDayId)
       remoteDirectory: credentials.remoteDatabaseDirectory,
       onLog: (String message) { log('database', message); },
     );
+    
 
     // MODELS
 
-    HouseSensorsModel houseSensors = new HouseSensorsModel(
+    HouseSensorsModel houseSensors = new HouseSensorsModel( // (added to models list by reference below)
       await cloudbits.getDevice(houseSensorsId),
       remy,
       messageCenter,
@@ -183,7 +184,25 @@ if (deviceId == showerDayId)
       onLog: (String message) { log('house sensors', message); },
     );
 
+    DataIngestor ingestor = DataIngestor( // (added to models list by reference below)
+      database: database,
+      onLog: (String message) { log('data ingestor', message); },
+    );
+    ingestor.addSource(HouseSensorsDataAdaptor(
+      tableId: Database.dbHouseSensors,
+      model: houseSensors,
+    ));
+    ingestor.addSource(StreamDoubleDataAdaptor(
+      tableId: Database.dbSolarTable,
+      stream: solar.power,
+    ));
+    // TODO(ianh): add thermostat
+    // TODO(ianh): add rackTemperature, masterBedroomTemperature, familyRoomTemperature
+    // TODO(ianh): add familyRoomURadMonitor
+    // TODO(ianh): add outsideURadMonitor
+
     List<Model> models = <Model>[
+      ingestor,
       new LaundryRoomModel(
         await cloudbits.getDevice(laundryId),
         remy,

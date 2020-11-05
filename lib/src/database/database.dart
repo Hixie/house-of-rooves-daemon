@@ -95,7 +95,7 @@ class Database {
         if (password != databasePassword)
           throw SocketException('invalid password on write request');
         int tableId = buffer.readInt64();
-        Table table = getTable(tableId);
+        Table table = getTable(tableId); // throws if id is invalid
         int recordSize = table.inputRecordSize;
         if (buffer.available < recordSize) {
           if (verbose)
@@ -113,6 +113,16 @@ class Database {
       log('error: $error on write socket from $client');
     }
     await socket.close().catchError(() { }); // errors closing sockets don't really matter
+  }
+
+  void write(int tableId, Uint8List data) {
+    Table table = getTable(tableId); // throws if id is invalid
+    int recordSize = table.inputRecordSize;
+    if (data.length < recordSize)
+      throw ArgumentError('Table ${table.name} expects records of size $recordSize bytes but write() was called with ${data.length} bytes');
+    if (verbose)
+      log('received ${data.length} byte record locally to write to ${table.name}');
+    table.add(TableRecord.now(data));
   }
 
   int _readConnectionCount = 0;
@@ -188,6 +198,7 @@ class Database {
 
   static const int dbSolarTable = 0x0000000000000001;
   static const int dbDishwasherTable = 0x0000000000000002;
+  static const int dbHouseSensors = 0x0000000000000003;
 
   final Map<int, Table> _tables = <int, Table>{};
 
@@ -237,6 +248,15 @@ class Database {
           // BYTES 22 and 23: cycles completed, big-endian
           // BYTES 24 and 25: door count, big-endian
           // BYTES 26 and 27: power-on count, big-endian
+          break;
+        case dbHouseSensors:
+          _tables[id] = Table('house_sensors', 1, localDirectory, remoteDirectory, onLog);
+          // BYTE 0:
+          //  front door - 1 bit (LSB)
+          //  garage door - 1 bit
+          //  back door - 1 bit
+          //  reserved - 4 bits
+          //  no data - 1 bit (MSB) (all others bits will also be set when data is unavailable)
           break;
         default:
           throw UnsupportedError('no table with id 0x${id.toRadixString(16)}');

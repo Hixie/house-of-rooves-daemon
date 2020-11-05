@@ -632,7 +632,7 @@ class ThermostatModel extends Model {
     if (verbose)
       log('minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
     if (minimum != null && maximum != null && currentTemperature != null) {
-      assert(minimum < maximum);
+      assert(minimum < maximum, 'regime out of range: minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
       if (currentTemperature < minimum) {
         return new _ThermostatModelStateDescription(new _Heating(minimum.correct(marginDelta)), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum');
       } else if (currentTemperature > maximum) {
