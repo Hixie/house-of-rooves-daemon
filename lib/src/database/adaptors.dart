@@ -91,8 +91,8 @@ abstract class StreamDataAdaptor<T> extends DataAdaptor {
   Uint8List adapt(T next);
 }
 
-class StreamDoubleDataAdaptor extends StreamDataAdaptor<double> {
-  StreamDoubleDataAdaptor({int tableId, Stream<double> stream}) : super(tableId, stream);
+class DoubleStreamDataAdaptor extends StreamDataAdaptor<double> {
+  DoubleStreamDataAdaptor({int tableId, Stream<double> stream}) : super(tableId, stream);
 
   @override
   Uint8List adapt(double next) {
@@ -101,4 +101,79 @@ class StreamDoubleDataAdaptor extends StreamDataAdaptor<double> {
     final ByteData byteData = ByteData(8)..setFloat64(0, next);
     return byteData.buffer.asUint8List();
   }
+}
+
+class TemperatureStreamDataAdaptor extends StreamDataAdaptor<Temperature> {
+  TemperatureStreamDataAdaptor({int tableId, Stream<Temperature> stream}) : super(tableId, stream);
+
+  @override
+  Uint8List adapt(Temperature next) {
+    if (next == null)
+      return Uint8List.fromList(<int>[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+    final ByteData byteData = ByteData(8)..setFloat64(0, next.celsius);
+    return byteData.buffer.asUint8List();
+  }
+}
+
+abstract class ByteBuildingStreamDataAdaptor<T> extends StreamDataAdaptor<T> {
+  ByteBuildingStreamDataAdaptor({int tableId, this.length, Stream<T> stream}) : super(tableId, stream);
+
+  final int length; // payload bytes
+
+  ByteData _byteData;
+  int _position;
+  int _bit;
+
+  @override
+  Uint8List adapt(T next) {
+    assert(_byteData == null);
+    if (next == null)
+      return Uint8List.fromList(List<int>.filled(length, 0xFF));
+    _byteData = ByteData(length);
+    _position = 0;
+    _bit = 0;
+    fill(next);
+    if (_bit > 0)
+      _position += 1;
+    assert(_position == length);
+    final Uint8List result = _byteData.buffer.asUint8List();
+    _byteData = null;
+    return result;
+  }
+
+  void pushBit(bool data) {
+    int byte = _byteData.getUint8(_position);
+    final int mask = 0x01 << _bit;
+    if (data) {
+      byte |= mask;
+    } else {
+      byte &= ~mask;
+    }
+    _byteData.setUint8(_position, byte);
+    _bit += 1;
+    if (_bit > 7) {
+      _bit = 0;
+      _position += 1;
+    }
+  }
+
+  void pushByte(int data) {
+    _byteData.setUint8(_position, data);
+    _position += 1;
+    _bit = 0;
+  }
+
+  void pushInteger(int data) {
+    _byteData.setInt64(_position, data);
+    _position += 8;
+    _bit = 0;
+  }
+
+  void pushDouble(double data) {
+    _byteData.setFloat64(_position, data);
+    _position += 8;
+    _bit = 0;
+  }
+
+  void fill(T next);
 }

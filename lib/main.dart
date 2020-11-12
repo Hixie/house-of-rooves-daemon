@@ -189,17 +189,39 @@ Future<Null> main() async {
       onLog: (String message) { log('data ingestor', message); },
     );
     ingestor.addSource(HouseSensorsDataAdaptor(
-      tableId: Database.dbHouseSensors,
+      tableId: dbHouseSensors,
       model: houseSensors,
     ));
-    ingestor.addSource(StreamDoubleDataAdaptor(
-      tableId: Database.dbSolarTable,
+    ingestor.addSource(DoubleStreamDataAdaptor(
+      tableId: dbSolarTable,
       stream: solar.power,
     ));
-    // TODO(ianh): add thermostat
-    // TODO(ianh): add rackTemperature, masterBedroomTemperature, familyRoomTemperature
-    // TODO(ianh): add familyRoomURadMonitor
-    // TODO(ianh): add outsideURadMonitor
+    ingestor.addSource(ThermostatDataAdaptor(
+      tableId: dbThermostat,
+      stream: thermostat.report,
+    ));
+    ingestor.addSource(TemperatureStreamDataAdaptor(
+      tableId: dbRackTemperature,
+      stream: rackTemperature.temperature,
+    ));
+    ingestor.addSource(TemperatureStreamDataAdaptor(
+      tableId: dbMasterBedroomTemperature,
+      stream: masterBedroomTemperature.temperature,
+    ));
+    ingestor.addSource(TemperatureStreamDataAdaptor(
+      tableId: dbFamilyRoomTemperature,
+      stream: familyRoomTemperature.temperature,
+    ));
+    ingestor.addSource(MeasurementDataAdaptor(
+      tableId: dbFamilyRoomSensors,
+      count: 8,
+      stream: familyRoomURadMonitor.dataStream,
+    ));
+    ingestor.addSource(MeasurementDataAdaptor(
+      tableId: dbOutsideSensors,
+      count: 10,
+      stream: outsideURadMonitor.dataStream,
+    ));
 
     List<Model> models = <Model>[
       ingestor,

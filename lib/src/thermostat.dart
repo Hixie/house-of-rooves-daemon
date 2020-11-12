@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:typed_data';
 
 import 'package:home_automation_tools/all.dart';
 
 import 'common.dart';
 import 'house_sensors.dart';
+import 'database/adaptors.dart';
 
 // TODO(ianh): on startup, don't reset back to normal unless it's in a temporary heat or cool override mode
 // TODO(ianh): predicted temperature should affect targets (e.g. if it's going to be hot out in the next few hours, don't heat)
@@ -23,7 +25,7 @@ enum ThermostatOverride { heating, cooling, fan, quiet, alwaysHeat, alwaysCool, 
 const Duration lockoutDuration = const Duration(hours: 1, minutes: 30);
 enum ThermostatLockoutOperation { heating, cooling }
 
-const Duration temperatureUpdatePeriod = const Duration(minutes: 30);
+const Duration temperatureUpdatePeriod = const Duration(minutes: 10);
 const Duration temperatureLifetime = const Duration(minutes: 15); // after 15 minutes we assume the data is obsolete
 
 const bool verbose = false;
@@ -837,4 +839,11 @@ class CurrentValue<T> {
   void dispose() {
     _timer?.cancel();
   }
+}
+
+class ThermostatDataAdaptor extends StreamDataAdaptor<ThermostatReport> {
+  ThermostatDataAdaptor({int tableId, Stream<ThermostatReport> stream}) : super(tableId, stream);
+
+  @override
+  Uint8List adapt(ThermostatReport next) => next?.encode() ?? Uint8List.fromList(<int>[0xFF, 0xFF, 0xFF, 0xFF]);
 }

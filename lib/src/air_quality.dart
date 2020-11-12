@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:home_automation_tools/all.dart';
+import 'package:meta/meta.dart';
 
 import 'common.dart';
+import 'database/adaptors.dart';
 
 class AirQualityModel extends Model {
   AirQualityModel(List<Stream<MeasurementPacket>> dataSources, this.remy, { LogCallback onLog }) : super(onLog: onLog) {
@@ -25,8 +27,8 @@ class AirQualityModel extends Model {
   final Map<MeasurementStation, Map<Metric, Measurement>> _metrics = <MeasurementStation, Map<Metric, Measurement>>{};
   AirQualityParameter _worstParameter;
   Stopwatch _timeSinceLastReport = Stopwatch();
-  Duration _timeBetweenReports = const Duration(seconds: 10);
-  static const Duration _maxTimeBetweenReports = const Duration(minutes: 5);
+  Duration _timeBetweenReports = const Duration(minutes: 5); // at the start we give them more often, for debugging
+  static const Duration _maxTimeBetweenReports = const Duration(minutes: 20);
 
   bool _aqiDiffersSignificantly(AirQualityParameter a, AirQualityParameter b) {
     double delta = (a.aqi - b.aqi).abs();
@@ -120,5 +122,15 @@ class AirQualityModel extends Model {
     if (value.timestamp.isBefore(element.timestamp))
       return value;
     return element;
+  }
+}
+
+class MeasurementDataAdaptor extends ByteBuildingStreamDataAdaptor<MeasurementPacket> {
+  MeasurementDataAdaptor({int tableId, @required int count, Stream<MeasurementPacket> stream}) : super(tableId: tableId, length: count * 8, stream: stream);
+
+  @override
+  void fill(MeasurementPacket packet) {
+    for (final Measurement measurement in packet.parameters)
+      pushDouble(measurement.value);
   }
 }

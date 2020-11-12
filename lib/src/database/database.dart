@@ -196,10 +196,6 @@ class Database {
     }
   }
 
-  static const int dbSolarTable = 0x0000000000000001;
-  static const int dbDishwasherTable = 0x0000000000000002;
-  static const int dbHouseSensors = 0x0000000000000003;
-
   final Map<int, Table> _tables = <int, Table>{};
 
   Table getTable(int id) {
@@ -250,13 +246,63 @@ class Database {
           // BYTES 26 and 27: power-on count, big-endian
           break;
         case dbHouseSensors:
-          _tables[id] = Table('house_sensors', 1, localDirectory, remoteDirectory, onLog);
+          _tables[id] = Table('house-sensors', 1, localDirectory, remoteDirectory, onLog);
           // BYTE 0:
           //  front door - 1 bit (LSB)
           //  garage door - 1 bit
           //  back door - 1 bit
           //  reserved - 4 bits
           //  no data - 1 bit (MSB) (all others bits will also be set when data is unavailable)
+          break;
+        case dbThermostat:
+          _tables[id] = Table('thermostat', 4, localDirectory, remoteDirectory, onLog);
+          // BYTE 0: temperature, celsius, signed int8
+          // BYTE 1: min point, celsius, signed int8
+          // BYTE 2: max point, celsius, signed int8
+          // BYTE 3:
+          //   LSB bit 0: cooling allowed
+          //       bit 1: heating allowed
+          //       bit 2: cooling active
+          //       bit 3: heating active
+          //       bit 4: fan active
+          //       bit 5: override enabled
+          //       bit 6: recovery enabled
+          //   MSB bit 7: reserved
+          break;
+        case dbFamilyRoomSensors:
+          _tables[id] = Table('uradmonitor-family-room', 8*8, localDirectory, remoteDirectory, onLog);
+          // 8 eight-byte doubles:
+          //   Radiation (μSv/h)
+          //   Temperature (℃)
+          //   Humidity (RH)
+          //   Pressure (Pa)
+          //   VOC (Ω)
+          //   CO₂ (ppm)
+          //   Noise (dB)
+          //   PM₂.₅ (µg/m³)
+          break;
+        case dbOutsideSensors:
+          _tables[id] = Table('uradmonitor-outside', 10*8, localDirectory, remoteDirectory, onLog);
+          // 10 eight-byte doubles:
+          //   Temperature (℃)
+          //   Humidity (RH)
+          //   Pressure (Pa)
+          //   VOC (Ω)
+          //   CO₂ (ppm)
+          //   Noise (dB)
+          //   PM₁.₀ (µg/m³)
+          //   PM₂.₅ (µg/m³)
+          //   PM₁₀ (µg/m³)
+          //   O₃ (ppb)
+          break;
+        case dbRackTemperature: // celsius as double
+          _tables[id] = Table('temperature-rack', 8, localDirectory, remoteDirectory, onLog);
+          break;
+        case dbMasterBedroomTemperature: // celsius as double
+          _tables[id] = Table('temperature-master-bedroom', 8, localDirectory, remoteDirectory, onLog);
+          break;
+        case dbFamilyRoomTemperature: // celsius as double
+          _tables[id] = Table('temperature-family-room', 8, localDirectory, remoteDirectory, onLog);
           break;
         default:
           throw UnsupportedError('no table with id 0x${id.toRadixString(16)}');
@@ -347,7 +393,8 @@ class Table {
     _lock.run(() async {
       await _rotateFile(record.timestamp);
       _fileTimestamp ??= record.timestamp;
-      log('$name received $record');
+      if (verbose)
+        log('$name received $record');
       await _file.writeFrom(record.encode());
       _lastRecord = record;
       _broadcastController.add(record);
