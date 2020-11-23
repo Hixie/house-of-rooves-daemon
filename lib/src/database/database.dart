@@ -134,15 +134,17 @@ class Database {
     String client = '${socket.remoteAddress.address} (#$connectionId)';
     try {
       bool connected = true;
-      socket.done.then((Object result) {
-        log('connection with $client terminated');
+      socket.done.then((Object result) { 
+        if (verbose)
+         log('connection with $client terminated');
       }, onError: (Object error) {
         log('connection with $client terminated ($error)');
       }).whenComplete(() {
         connected = false;
       });
       client = '${(await socket.remoteAddress.reverse()).host} (${socket.remoteAddress.address}, #$connectionId)';
-      log('connection received on read socket from $client');
+      if (verbose)
+        log('connection received on read socket from $client');
       await for (Uint8List packet in socket) {
         buffer.add(packet);
         if (buffer.available < kTableLength + kCommandLength) {
@@ -166,7 +168,8 @@ class Database {
             while (true) {
               TableRecord record = await nextRecord.future;
               if (connected) {
-                log('sending $record to $client');
+                if (verbose)
+                  log('sending $record to $client');
                 socket.add(record.encode());
               } else {
                 break;

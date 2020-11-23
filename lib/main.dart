@@ -11,7 +11,7 @@ import 'src/database/adaptors.dart';
 import 'src/google_home.dart';
 import 'src/house_sensors.dart';
 import 'src/laundry.dart';
-import 'src/leak_monitor.dart';
+// import 'src/leak_monitor.dart';
 import 'src/message_center.dart';
 import 'src/remy_messages_model.dart';
 import 'src/shower_day.dart';
@@ -155,11 +155,11 @@ Future<Null> main() async {
       station: new MeasurementStation(siteName: 'outside uRADMonitor', outside: true),
       onLog: (String message) { log('uradmonitor', '(outside) $message'); },
     );
-    ProcessMonitor leakSensorKitchenSinkMonitor = ProcessMonitor(
-      executable: '/home/ianh/dev/leak-sensor/leak-sensor-monitor',
-      onLog: (String message) { log('leak sensor', '(kitchen sink) $message'); },
-      onError: (dynamic error) async { log('leak sensor', '(kitchen sink) $error'); },
-    );
+    // ProcessMonitor leakSensorKitchenSinkMonitor = ProcessMonitor(
+    //   executable: '/home/ianh/dev/leak-sensor/leak-sensor-monitor',
+    //   onLog: (String message) { log('leak sensor', '(kitchen sink) $message'); },
+    //   onError: (dynamic error) async { log('leak sensor', '(kitchen sink) $error'); },
+    // );
     await remy.ready;
 
     Database database = await Database.connect(
@@ -244,12 +244,12 @@ Future<Null> main() async {
         remy,
         onLog: (String message) { log('air quality', message); },
       ),
-      new LeakMonitorModel(
-        leakSensorKitchenSinkMonitor,
-        remy,
-        'KitchenSink',
-        onLog: (String message) { log('leak sensor', '(kitchen sink) $message'); },
-      ),
+      // new LeakMonitorModel(
+      //   leakSensorKitchenSinkMonitor,
+      //   remy,
+      //   'KitchenSink',
+      //   onLog: (String message) { log('leak sensor', '(kitchen sink) $message'); },
+      // ),
       houseSensors,
       new ShowerDayModel(
         await cloudbits.getDevice(showerDayId),
