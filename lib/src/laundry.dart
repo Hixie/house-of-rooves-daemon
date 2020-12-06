@@ -140,9 +140,9 @@ class LaundryRoomModel extends Model {
       _dryerStopwatch.reset();
       _dryerStopwatch.start();
       log('dryer started');
-      if (dryerFull)
+      if (dryerFull) // we assume that means someone emptied the dryer before restarting it...
         remy.pushButtonById('laundryAutomaticCleanLaundryPending');
-      if (!washerRunning)
+      if (!washerRunning) // we assume the dryer was filled from the washer...
         remy.pushButtonById('laundryAutomaticWasherEmpty');
       remy.pushButtonById('laundryAutomaticDryerStarted');
     } else {

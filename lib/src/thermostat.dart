@@ -9,22 +9,23 @@ import 'house_sensors.dart';
 import 'database/adaptors.dart';
 
 // TODO(ianh): on startup, don't reset back to normal unless it's in a temporary heat or cool override mode
+// TODO(ianh): heating/cooling override turns off fan when fan override mode is on and doors are open
+
 // TODO(ianh): predicted temperature should affect targets (e.g. if it's going to be hot out in the next few hours, don't heat)
-// TODO(ianh): if target is upstairs and downstairs is already in range, just fan
-// TODO(ianh): move lockout logic to remy
 // TODO(ianh): need a way to turn to auto-unoccupied mode when we're absent
-// TODO(ianh): add a 20 second back-off to the door/tv override
 
 const double overrideDelta = 0.75; // Celsius degrees for override modes
 const double marginDelta = 0.5; // Celsius degrees for how far to overshoot when heating or cooling
 
 enum ThermostatOverride { heating, cooling, fan, quiet, alwaysHeat, alwaysCool, alwaysFan, alwaysOff }
 
-const Duration lockoutDuration = const Duration(hours: 1, minutes: 30);
+const Duration lockoutDuration = const Duration(hours: 2, minutes: 15);
 enum ThermostatLockoutOperation { heating, cooling }
 
 const Duration temperatureUpdatePeriod = const Duration(minutes: 10);
 const Duration temperatureLifetime = const Duration(minutes: 15); // after 15 minutes we assume the data is obsolete
+
+const Duration doorTimeout = const Duration(seconds: 20); // if door is open less than this time, we ignore it
 
 const bool verbose = false;
 
@@ -44,14 +45,20 @@ final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
     'morning',
     new DayTime(06, 30), new DayTime(09, 30),
-    new TargetTemperature(22.0), new TargetTemperature(26.0), // low was 23.5 but that caused heating in summer
+    new TargetTemperature(22.5), new TargetTemperature(26.0), // low was 23.5 but that caused heating in summer; 22.0 did not
     TemperatureSource.upstairs,
   ),
   new ThermostatRegime(
     'day time',
-    new DayTime(09, 30), new DayTime(22, 30),
-    new TargetTemperature(22.0), new TargetTemperature(24.0),
+    new DayTime(09, 30), new DayTime(21, 30),
+    new TargetTemperature(22.15), new TargetTemperature(24.0), // ian says 22 too cold, 22.5 too hot, 22.25 borderline too hot when it reaches 22.75
     TemperatureSource.downstairs,
+  ),
+  new ThermostatRegime(
+    'evening',
+    new DayTime(21, 30), new DayTime(22, 30),
+    new TargetTemperature(22.0), new TargetTemperature(24.0),
+    TemperatureSource.upstairs,
   ),
 ];
 
@@ -438,9 +445,11 @@ class ThermostatModel extends Model {
   Temperature _currentDownstairsTemperature;
   Temperature _currentUpstairsTemperature;
   Measurement _currentIndoorsPM2_5;
+  ThermostatOverride _currentThermostatOverride;
+
   bool _currentFrontDoorState;
   bool _currentBackDoorState;
-  ThermostatOverride _currentThermostatOverride;
+  bool _doorsOpen = false;
 
   Temperature _temperatureAtOverrideTime;
   ThermostatRegime _regimeAtOverrideTime;
@@ -504,8 +513,12 @@ class ThermostatModel extends Model {
       default:
         if (_exceeds(_currentRackTemperature, new TargetTemperature(40.0)))
           return new _ThermostatModelStateDescription(const _RackOverheat(), 'rack is at $_currentRackTemperature');
-        if (_isTrue(_currentFrontDoorState) || _isTrue(_currentBackDoorState))
-          return new _ThermostatModelStateDescription(const _DoorsOpen(), '${_describeDoor(_currentFrontDoorState, 'front')}, ${_describeDoor(_currentBackDoorState, 'back')}');
+        if (_doorsOpen) {
+          final String doorState = '${_describeDoor(_currentFrontDoorState, 'front')}, ${_describeDoor(_currentBackDoorState, 'back')}';
+          if (_currentThermostatOverride == ThermostatOverride.fan)
+            return new _ThermostatModelStateDescription(const _ForceFan(), '$doorState, but fan override specified');
+          return new _ThermostatModelStateDescription(const _DoorsOpen(), doorState);
+        }
         break;
     }
     // None of the overrides apply, so now let's consider the current regime.
@@ -519,6 +532,7 @@ class ThermostatModel extends Model {
       _currentRegime = regime;
     }
     Temperature minimum, maximum, currentTemperature;
+    final Temperature fanSourceTemperature = _currentDownstairsTemperature;
     bool ensureFan = false;
     String regimeAdjective = '';
     if (regime != null) {
@@ -616,12 +630,16 @@ class ThermostatModel extends Model {
       }
     }
     if (verbose)
-      log('minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
+      log('minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; fanSourceTemperature: $fanSourceTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
     if (minimum != null && maximum != null && currentTemperature != null) {
       assert(minimum < maximum, 'regime out of range: minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
       if (currentTemperature < minimum) {
+        if (fanSourceTemperature > minimum)
+          return new _ThermostatModelStateDescription(new _ForceFan(), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum, but fan source temperature is above minimum');
         return new _ThermostatModelStateDescription(new _Heating(minimum.correct(marginDelta)), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum');
       } else if (currentTemperature > maximum) {
+        if (fanSourceTemperature < maximum)
+          return new _ThermostatModelStateDescription(new _ForceFan(), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum, but fan source temperature is below maximum');
         return new _ThermostatModelStateDescription(new _Cooling(maximum.correct(-marginDelta)), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum');
       } else if (_currentState is _Heating || _currentState is _ForceHeating) {
         if (currentTemperature < minimum.correct(marginDelta))
@@ -783,14 +801,35 @@ class ThermostatModel extends Model {
     if (value == null)
       return;
     _currentFrontDoorState = value;
-    _processData();
+    _updateDoors();
   }
 
   void _handleBackDoor(bool value) {
     if (value == null)
       return;
     _currentBackDoorState = value;
-    _processData();
+    _updateDoors();
+  }
+
+  Timer _doorTimer;
+
+  void _updateDoors() {
+    if (_isTrue(_currentFrontDoorState) || _isTrue(_currentBackDoorState)) {
+      if (!_doorsOpen && _doorTimer == null) {
+        _doorTimer = Timer(doorTimeout, () {
+          _doorsOpen = true;
+          _doorTimer = null;
+          _processData();
+        });
+      }
+    } else {
+      _doorTimer?.cancel();
+      _doorTimer = null;
+      if (_doorsOpen) {
+        _doorsOpen = false;
+        _processData();
+      }
+    }
   }
 
   void _report([ Timer timer ]) {
