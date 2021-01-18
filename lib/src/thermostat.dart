@@ -27,7 +27,7 @@ const Duration temperatureLifetime = const Duration(minutes: 15); // after 15 mi
 
 const Duration doorTimeout = const Duration(seconds: 20); // if door is open less than this time, we ignore it
 
-const bool verbose = true;
+const bool verbose = false;
 
 final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
@@ -671,6 +671,9 @@ class ThermostatModel extends Model {
       remy.pushButtonById('thermostatTargetMode${targetState.state.remyMode}');
       _currentState = targetState.state;
       _report();
+    } else {
+      if (verbose)
+        log('continuing with existing mode: ${_currentState}');
     }
   }
 
