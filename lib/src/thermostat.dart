@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 
+import 'package:meta/meta.dart';
 import 'package:home_automation_tools/all.dart';
 
 import 'common.dart';
@@ -9,13 +10,14 @@ import 'house_sensors.dart';
 import 'database/adaptors.dart';
 
 // TODO(ianh): on startup, don't reset back to normal unless it's in a temporary heat or cool override mode
-// TODO(ianh): heating/cooling override turns off fan when fan override mode is on and doors are open
-
+// TODO(ianh): heating/cooling override turn off fan when fan override mode is on and doors are open, because remy just has one "override" mode
 // TODO(ianh): predicted temperature should affect targets (e.g. if it's going to be hot out in the next few hours, don't heat)
 // TODO(ianh): need a way to turn to auto-unoccupied mode when we're absent
 
 const double overrideDelta = 0.75; // Celsius degrees for override modes
 const double marginDelta = 0.5; // Celsius degrees for how far to overshoot when heating or cooling
+const double reservoirStartDelta = 3.0; // Celsius degrees for when to consider reservoir
+const double reservoirEndDelta = 1.5; // Celsius degrees for when to consider reservoir
 
 enum ThermostatOverride { heating, cooling, fan, quiet, alwaysHeat, alwaysCool, alwaysFan, alwaysOff }
 
@@ -283,7 +285,7 @@ class _ForceFan extends _Fan {
   const _ForceFan();
 
   @override
-  String get description => 'circulating air due to override...';
+  String get description => 'circulating air due to override from Remy...';
 
   @override
   String get remyMode => 'Fan';
@@ -297,6 +299,29 @@ class _CleaningFan extends _Fan {
 
   @override
   String get remyMode => 'PM25Fan';
+}
+
+class _ReservoirFan extends _Fan {
+  const _ReservoirFan({ @required this.reservoirWarmer });
+
+  final bool reservoirWarmer;
+
+  @override
+  String get description => 'circulating air due to favourable temperature imbalance (${ reservoirWarmer ? "reservoir warmer" : "reservoir colder"})...';
+
+  @override
+  int get hashCode => reservoirWarmer.hashCode;
+
+  @override
+  bool operator ==(dynamic other) {
+    if (other.runtimeType != runtimeType)
+      return false;
+    _ReservoirFan typedOther = other;
+    return typedOther.reservoirWarmer == reservoirWarmer;
+  }
+
+  @override
+  String get remyMode => 'Fan';
 }
 
 class _Idle extends _ThermostatModelState {
@@ -637,12 +662,12 @@ class ThermostatModel extends Model {
       assert(minimum < maximum, 'regime out of range: minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
       assert(reservoirTemperature != null);
       if (currentTemperature < minimum) {
-        if (reservoirTemperature > minimum)
-          return new _ThermostatModelStateDescription(new _ForceFan(), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum, but reservoir temperature is above minimum');
+        if (reservoirTemperature > minimum.correct(reservoirStartDelta) && _currentState is! _Heating)
+          return new _ThermostatModelStateDescription(_ReservoirFan(reservoirWarmer: true), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum, but reservoir temperature ($reservoirTemperature) is above minimum');
         return new _ThermostatModelStateDescription(new _Heating(minimum.correct(marginDelta)), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum');
       } else if (currentTemperature > maximum) {
-        if (reservoirTemperature < maximum)
-          return new _ThermostatModelStateDescription(new _ForceFan(), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum, but reservoir temperature is below maximum');
+        if (reservoirTemperature < maximum.correct(-reservoirStartDelta) && _currentState is! _Cooling)
+          return new _ThermostatModelStateDescription(_ReservoirFan(reservoirWarmer: false), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum, but reservoir temperature ($reservoirTemperature) is below maximum');
         return new _ThermostatModelStateDescription(new _Cooling(maximum.correct(-marginDelta)), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum');
       } else if (_currentState is _Heating || _currentState is _ForceHeating) {
         if (currentTemperature < minimum.correct(marginDelta))
@@ -650,6 +675,16 @@ class ThermostatModel extends Model {
       } else if (_currentState is _Cooling || _currentState is _ForceCooling) {
         if (currentTemperature > maximum.correct(-marginDelta))
           return new _ThermostatModelStateDescription(new _Cooling(maximum.correct(-marginDelta)), 'current temperature $currentTemperature; continuing cooling until below ${regimeAdjective}$maximum by $marginDelta');
+      } else if (_currentState is _ReservoirFan) {
+        if ((_currentState as _ReservoirFan).reservoirWarmer) {
+          if ((currentTemperature.correct(reservoirEndDelta) < reservoirTemperature) && (currentTemperature < maximum)) {
+            return new _ThermostatModelStateDescription(_ReservoirFan(reservoirWarmer: true), 'continuing to warm using the fan since current temperature $currentTemperature is less than the maximum ($maximum) and much less than the reservoir ($reservoirTemperature)');
+          }
+        } else {
+          if ((currentTemperature.correct(-reservoirEndDelta) > reservoirTemperature) && (currentTemperature > minimum)) {
+            return new _ThermostatModelStateDescription(_ReservoirFan(reservoirWarmer: false), 'continuing to cool using the fan since current temperature $currentTemperature is more than the minimum ($minimum) and much more than the reservoir ($reservoirTemperature)');
+          }
+        }
       }
     }
     if (ensureFan)
