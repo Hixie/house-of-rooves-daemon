@@ -15,6 +15,18 @@ class Lock {
     }
   }
 
+  Stream<T> stream<T>(Stream<T> Function() body) async* {
+    Future<void> previousLock = _currentLock.future;
+    Completer<void> ourLock = Completer<void>();
+    _currentLock = ourLock;
+    await previousLock;
+    try {
+      yield* body();
+    } finally {
+      ourLock.complete();
+    }
+  }
+
   void dispose() {
     _currentLock = null;
   }

@@ -226,7 +226,6 @@ Future<Null> main() async {
     List<Model> models = <Model>[
       ingestor,
       new LaundryRoomModel(
-        await cloudbits.getDevice(laundryId),
         remy,
         tts,
         onLog: (String message) { log('laundry', message); },

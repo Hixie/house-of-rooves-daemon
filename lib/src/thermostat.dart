@@ -19,7 +19,7 @@ const double marginDelta = 0.5; // Celsius degrees for how far to overshoot when
 
 enum ThermostatOverride { heating, cooling, fan, quiet, alwaysHeat, alwaysCool, alwaysFan, alwaysOff }
 
-const Duration lockoutDuration = const Duration(hours: 2, minutes: 15);
+const Duration lockoutDuration = const Duration(hours: 3, minutes: 15); // 2h15m seemed too short
 enum ThermostatLockoutOperation { heating, cooling }
 
 const Duration temperatureUpdatePeriod = const Duration(minutes: 10);
@@ -27,7 +27,7 @@ const Duration temperatureLifetime = const Duration(minutes: 15); // after 15 mi
 
 const Duration doorTimeout = const Duration(seconds: 20); // if door is open less than this time, we ignore it
 
-const bool verbose = false;
+const bool verbose = true;
 
 final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
@@ -490,13 +490,14 @@ class ThermostatModel extends Model {
     return buffer.toString();
   }
 
-  bool _lockedOut(ThermostatLockoutOperation wantedMode) {
+  bool _lockedOut(ThermostatLockoutOperation wantedMode, { DateTime now }) {
+    now ??= DateTime.now();
     if (_lockoutStart == null)
       return false;
     return _lockoutStart != null
         && _lockout != null
         && _lockout != wantedMode
-        && new DateTime.now().difference(_lockoutStart) < lockoutDuration;
+        && now.difference(_lockoutStart) < lockoutDuration;
   }
 
   _ThermostatModelStateDescription computeMode() {
@@ -531,8 +532,7 @@ class ThermostatModel extends Model {
       log('new thermal regime: ${regime ?? "<none>"}');
       _currentRegime = regime;
     }
-    Temperature minimum, maximum, currentTemperature;
-    final Temperature fanSourceTemperature = _currentDownstairsTemperature;
+    Temperature minimum, maximum, currentTemperature, reservoirTemperature;
     bool ensureFan = false;
     String regimeAdjective = '';
     if (regime != null) {
@@ -542,13 +542,15 @@ class ThermostatModel extends Model {
       switch (regime.source) {
         case TemperatureSource.upstairs:
           currentTemperature = _currentUpstairsTemperature;
+          reservoirTemperature = _currentDownstairsTemperature;
           if (verbose)
-            log('using upstairs temperature (currently $currentTemperature)');
+            log('using upstairs temperature (currently $currentTemperature); reservoir downsrairs ($reservoirTemperature)');
           break;
         case TemperatureSource.downstairs:
           currentTemperature = _currentDownstairsTemperature;
+          reservoirTemperature = _currentUpstairsTemperature;
           if (verbose)
-            log('using downstairs temperature (currently $currentTemperature)');
+            log('using downstairs temperature (currently $currentTemperature); reservoir upstairs ($reservoirTemperature)');
           break;
       }
     }
@@ -630,16 +632,17 @@ class ThermostatModel extends Model {
       }
     }
     if (verbose)
-      log('minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; fanSourceTemperature: $fanSourceTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
+      log('minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; reservoirTemperature: $reservoirTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
     if (minimum != null && maximum != null && currentTemperature != null) {
       assert(minimum < maximum, 'regime out of range: minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
+      assert(reservoirTemperature != null);
       if (currentTemperature < minimum) {
-        if (fanSourceTemperature > minimum)
-          return new _ThermostatModelStateDescription(new _ForceFan(), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum, but fan source temperature is above minimum');
+        if (reservoirTemperature > minimum)
+          return new _ThermostatModelStateDescription(new _ForceFan(), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum, but reservoir temperature is above minimum');
         return new _ThermostatModelStateDescription(new _Heating(minimum.correct(marginDelta)), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum');
       } else if (currentTemperature > maximum) {
-        if (fanSourceTemperature < maximum)
-          return new _ThermostatModelStateDescription(new _ForceFan(), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum, but fan source temperature is below maximum');
+        if (reservoirTemperature < maximum)
+          return new _ThermostatModelStateDescription(new _ForceFan(), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum, but reservoir temperature is below maximum');
         return new _ThermostatModelStateDescription(new _Cooling(maximum.correct(-marginDelta)), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum');
       } else if (_currentState is _Heating || _currentState is _ForceHeating) {
         if (currentTemperature < minimum.correct(marginDelta))
@@ -836,8 +839,11 @@ class ThermostatModel extends Model {
     String additional = '';
     if (_currentThermostatOverride != null)
       additional += '; override: ${_currentThermostatOverride}';
-    if (_lockedOut(null))
-      additional += '; lockout: $_lockout';
+    final DateTime now = DateTime.now();
+    if (_lockedOut(null, now: now)) {
+      final String remaining = prettyDuration(lockoutDuration - now.difference(_lockoutStart));
+      additional += '; lockout: $_lockout ($remaining remaining)';
+    }
     log('upstairs=${_currentUpstairsTemperature}; downstairs=${_currentDownstairsTemperature} (thermostat=${_currentThermostatTemperature}, uradmonitor=${_currentIndoorAirQualityTemperature}); rack=${_currentRackTemperature}; indoor PM₂.₅: ${_currentIndoorsPM2_5}; regime: $_currentRegime; state: $_currentState$additional');
   }
 }
