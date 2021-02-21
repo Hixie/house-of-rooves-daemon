@@ -274,9 +274,12 @@ class _ForceCooling extends _ThermostatModelState {
 abstract class _Fan extends _ThermostatModelState {
   const _Fan();
 
+  bool get manualOverride;
+  bool get rareSituation;
+
   @override
   void configureThermostat(Thermostat thermostat) {
-    thermostat.setLeds(red: false, yellow: true, green: false);
+    thermostat.setLeds(red: rareSituation, yellow: true, green: !manualOverride);
     thermostat.fan();
   }
 }
@@ -289,6 +292,12 @@ class _ForceFan extends _Fan {
 
   @override
   String get remyMode => 'Fan';
+
+  @override
+  bool get manualOverride => true;
+
+  @override
+  bool get rareSituation => false;
 }
 
 class _CleaningFan extends _Fan {
@@ -299,6 +308,12 @@ class _CleaningFan extends _Fan {
 
   @override
   String get remyMode => 'PM25Fan';
+
+  @override
+  bool get manualOverride => false;
+
+  @override
+  bool get rareSituation => true;
 }
 
 class _ReservoirFan extends _Fan {
@@ -310,6 +325,15 @@ class _ReservoirFan extends _Fan {
   String get description => 'circulating air due to favourable temperature imbalance (${ reservoirWarmer ? "reservoir warmer" : "reservoir colder"})...';
 
   @override
+  String get remyMode => 'Fan';
+
+  @override
+  bool get manualOverride => false;
+
+  @override
+  bool get rareSituation => false;
+
+  @override
   int get hashCode => reservoirWarmer.hashCode;
 
   @override
@@ -319,9 +343,6 @@ class _ReservoirFan extends _Fan {
     _ReservoirFan typedOther = other;
     return typedOther.reservoirWarmer == reservoirWarmer;
   }
-
-  @override
-  String get remyMode => 'Fan';
 }
 
 class _Idle extends _ThermostatModelState {
@@ -569,7 +590,7 @@ class ThermostatModel extends Model {
           currentTemperature = _currentUpstairsTemperature;
           reservoirTemperature = _currentDownstairsTemperature;
           if (verbose)
-            log('using upstairs temperature (currently $currentTemperature); reservoir downsrairs ($reservoirTemperature)');
+            log('using upstairs temperature (currently $currentTemperature); reservoir downstairs ($reservoirTemperature)');
           break;
         case TemperatureSource.downstairs:
           currentTemperature = _currentDownstairsTemperature;
@@ -658,9 +679,8 @@ class ThermostatModel extends Model {
     }
     if (verbose)
       log('minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; reservoirTemperature: $reservoirTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
-    if (minimum != null && maximum != null && currentTemperature != null) {
+    if (minimum != null && maximum != null && currentTemperature != null && reservoirTemperature != null) {
       assert(minimum < maximum, 'regime out of range: minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
-      assert(reservoirTemperature != null);
       if (currentTemperature < minimum) {
         if (reservoirTemperature > minimum.correct(reservoirStartDelta) && _currentState is! _Heating)
           return new _ThermostatModelStateDescription(_ReservoirFan(reservoirWarmer: true), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum, but reservoir temperature ($reservoirTemperature) is above minimum');

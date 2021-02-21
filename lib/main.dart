@@ -20,12 +20,11 @@ import 'src/television_model.dart';
 import 'src/thermostat.dart';
 // import 'src/test_cloudbit.dart';
 
+const String cloudBitTestId = '00e04c02bd93';
 const String houseSensorsId = '243c201de435';
-const String laundryId = '00e04c02bd93';
 const String solarDisplayId = '243c201ddaf1';
-const String cloudBitTestId = '243c201dc805'; // damaged :-(
-const String showerDayId = '00e04c0355d0'; // was '243c201dcdfd', but that is damaged :-(
-//const String testCloudbitId = '000000000000'; // non-existent
+const String showerDayId = '00e04c0355d0';
+// '243c201dc805' and '243c201dcdfd' are damaged :-(
 
 const String rackThermometerId = '0000074f7305';
 const String masterBedroomThermometerId = '0115722937ff';
@@ -51,44 +50,16 @@ Future<Null> main() async {
       credentials.remyPassword,
       onLog: (String message) { log('remy', message); },
     );
-    // LittleBitsCloud cloud = new LittleBitsCloud(
-    //   authToken: credentials.littleBitsToken,
-    //   onIdentify: (String deviceId) {
-    //     if (deviceId == houseSensorsId)
-    //       return 'house sensors';
-    //     if (deviceId == laundryId)
-    //       return 'laundry';
-    //     if (deviceId == solarDisplayId)
-    //       return 'solar display';
-    //     if (deviceId == cloudBitTestId)
-    //       return 'cloudbit test device';
-    //     if (deviceId == showerDayId)
-    //       return 'shower day display';
-    //     if (deviceId == testCloudbitId)
-    //       return 'test';
-    //     return deviceId;
-    //   },
-    //   onError: (dynamic error) {
-    //     log('cloudbits', '$error');
-    //   },
-    //   onLog: (String deviceId, String message) {
-    //     log('cloudbits', message);
-    //   },
-    // );
     LittleBitsLocalServer cloudbits = new LittleBitsLocalServer(
       onIdentify: (String deviceId) {
+        if (deviceId == cloudBitTestId)
+          return const LocalCloudBitDeviceDescription('cloudbit test device', 'cloudbit-test.rooves.house');
         if (deviceId == houseSensorsId)
           return const LocalCloudBitDeviceDescription('house sensors', 'cloudbit-housesensors.rooves.house');
-        if (deviceId == laundryId)
-          return const LocalCloudBitDeviceDescription('laundry', 'cloudbit-laundry.rooves.house');
         if (deviceId == solarDisplayId)
           return const LocalCloudBitDeviceDescription('solar display', 'cloudbit-solar.rooves.house');
-        if (deviceId == cloudBitTestId)
-          return const LocalCloudBitDeviceDescription('cloudbit test device', 'cloudbit-test1.rooves.house');
         if (deviceId == showerDayId)
           return const LocalCloudBitDeviceDescription('shower day display', 'cloudbit-shower.rooves.house');
-        // if (deviceId == testCloudbitId)
-        //   return const LocalCloudBitDeviceDescription('test', 'cloudbit-test.rooves.house');
         throw new Exception('Unknown cloudbit device ID: $deviceId');
       },
       onLog: (String deviceId, String message) {
