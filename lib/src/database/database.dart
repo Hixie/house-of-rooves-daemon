@@ -211,6 +211,8 @@ class Database {
             log('received unknown command $command for table ${table.name} on read socket from $client');
         }
       }
+    } on SocketException catch (error) {
+      log('$client disconnected: $error');
     } catch (error, stack) {
       log('error: $error on read socket from $client\n$stack');
       await socket.close().catchError(() { }); // errors closing sockets really don't matter
@@ -388,7 +390,7 @@ class Table {
       Uint8List bytes = await _file.read(8);
       _fileTimestamp = DateTime.fromMillisecondsSinceEpoch(bytes.buffer.asByteData().getUint64(0), isUtc: true);
       await _file.setPosition((length ~/ fullRecordSize - 1) * fullRecordSize);
-      _lastRecord = TableRecord.fromRaw(await _file.read(fullRecordSize));
+      _lastRecord = TableRecord.fromRaw(await _file.read(fullRecordSize), requireNonNull: false);
     } else {
       _fileTimestamp = null;
     }

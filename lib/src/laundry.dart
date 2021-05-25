@@ -30,6 +30,7 @@ class LaundryRoomModel extends Model {
     if (oldValue == null || !_announce)
       return;
     log('received laundry-announce-done');
-    tts.audioIcon('laundry');
+    if (!muted)
+      tts.audioIcon('laundry');
   }
 }

@@ -16,7 +16,7 @@ import 'database/adaptors.dart';
 
 const double overrideDelta = 0.75; // Celsius degrees for override modes
 const double marginDelta = 0.5; // Celsius degrees for how far to overshoot when heating or cooling
-const double reservoirStartDelta = 3.0; // Celsius degrees for when to consider reservoir
+const double reservoirStartDelta = 2.0; // Celsius degrees for when to consider reservoir (3.0 led to overly hot upstairs; 2.5 led to overly cold downstairs)
 const double reservoirEndDelta = 1.5; // Celsius degrees for when to consider reservoir
 
 enum ThermostatOverride { heating, cooling, fan, quiet, alwaysHeat, alwaysCool, alwaysFan, alwaysOff }
@@ -34,8 +34,8 @@ const bool verbose = false;
 final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
     'night time',
-    new DayTime(22, 30), new DayTime(05, 30),
-    new TargetTemperature(20.0), new TargetTemperature(23.0),
+    new DayTime(23, 30), new DayTime(05, 30),
+    new TargetTemperature(20.0), new TargetTemperature(23.5),
     TemperatureSource.upstairs,
   ),
   new ThermostatRegime(
@@ -59,7 +59,13 @@ final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
     'evening',
     new DayTime(21, 30), new DayTime(22, 30),
-    new TargetTemperature(22.0), new TargetTemperature(24.0),
+    new TargetTemperature(22.0), new TargetTemperature(25.5),
+    TemperatureSource.upstairs,
+  ),
+  new ThermostatRegime(
+    'late evening',
+    new DayTime(22, 30), new DayTime(23, 30),
+    new TargetTemperature(21.0), new TargetTemperature(24.5),
     TemperatureSource.upstairs,
   ),
 ];
@@ -179,6 +185,22 @@ class _DoorsOpen extends _ThermostatModelState {
 
   @override
   String get remyMode => 'DoorsOff';
+}
+
+class _HeatingDisabledDueToFumes extends _ThermostatModelState {
+  const _HeatingDisabledDueToFumes();
+
+  @override
+  void configureThermostat(Thermostat thermostat) {
+    thermostat.setLeds(red: true, yellow: false, green: true);
+    thermostat.off();
+  }
+
+  @override
+  String get description => 'disabling heating; flammable fumes in garage';
+
+  @override
+  String get remyMode => 'FumesOff';
 }
 
 class _Heating extends _ThermostatModelState {
@@ -456,6 +478,7 @@ class ThermostatModel extends Model {
   }) : super(onLog: onLog) {
     _subscriptions.add(thermostat.status.listen(_handleThermostatStatus));
     _subscriptions.add(thermostat.temperature.listen(_handleThermostatTemperature));
+    _subscriptions.add(remy.getStreamForNotification('garage-has-fumes').listen(_handleRemyGarageHasFumesNotification));
     _subscriptions.add(remy.getStreamForNotificationWithArgument('thermostat-override').listen(_handleRemyOverride));
     _subscriptions.add(houseSensors.frontDoor.listen(_handleFrontDoor));
     _subscriptions.add(houseSensors.backDoor.listen(_handleBackDoor));
@@ -496,6 +519,7 @@ class ThermostatModel extends Model {
   bool _currentFrontDoorState;
   bool _currentBackDoorState;
   bool _doorsOpen = false;
+  bool _garageHasFumes = false;
 
   Temperature _temperatureAtOverrideTime;
   ThermostatRegime _regimeAtOverrideTime;
@@ -610,12 +634,14 @@ class ThermostatModel extends Model {
         case ThermostatOverride.heating:
           if ((currentTemperature != null && _temperatureAtOverrideTime != null &&
                currentTemperature > _temperatureAtOverrideTime.correct(overrideDelta))) {
-            log('achieved requested temperature increase; canceling override.');
+            log('achieved requested temperature increase (now at $currentTemperature, above ${_temperatureAtOverrideTime.correct(overrideDelta)}); canceling override.');
             _disableOverride();
           } else if (regime != _regimeAtOverrideTime) {
             log('entered new thermostat regime since override request; canceling override.');
             _disableOverride();
           } else if (minimum == null) {
+            if (_garageHasFumes)
+              return new _ThermostatModelStateDescription(new _HeatingDisabledDueToFumes(), 'no temperature available; heating override selected');
             return new _ThermostatModelStateDescription(new _ForceHeating(), 'no temperature available; heating override selected');
           } else {
             if (_temperatureAtOverrideTime != null) {
@@ -633,7 +659,7 @@ class ThermostatModel extends Model {
         case ThermostatOverride.cooling:
           if ((currentTemperature != null && _temperatureAtOverrideTime != null &&
                currentTemperature < _temperatureAtOverrideTime.correct(-overrideDelta))) {
-            log('achieved requested temperature decrease; canceling override.');
+            log('achieved requested temperature decrease (now at $currentTemperature, below ${_temperatureAtOverrideTime.correct(-overrideDelta)}); canceling override.');
             _disableOverride();
           } else if (regime != _regimeAtOverrideTime) {
             log('entered new thermostat regime since override request; canceling override.');
@@ -684,14 +710,19 @@ class ThermostatModel extends Model {
       if (currentTemperature < minimum) {
         if (reservoirTemperature > minimum.correct(reservoirStartDelta) && _currentState is! _Heating)
           return new _ThermostatModelStateDescription(_ReservoirFan(reservoirWarmer: true), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum, but reservoir temperature ($reservoirTemperature) is above minimum');
-        return new _ThermostatModelStateDescription(new _Heating(minimum.correct(marginDelta)), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum');
+        if (_garageHasFumes)
+          return new _ThermostatModelStateDescription(new _HeatingDisabledDueToFumes(), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum (reservoir temperature $reservoirTemperature is not sufficiently above minimum)');
+        return new _ThermostatModelStateDescription(new _Heating(minimum.correct(marginDelta)), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum (reservoir temperature $reservoirTemperature is not sufficiently above minimum)');
       } else if (currentTemperature > maximum) {
         if (reservoirTemperature < maximum.correct(-reservoirStartDelta) && _currentState is! _Cooling)
           return new _ThermostatModelStateDescription(_ReservoirFan(reservoirWarmer: false), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum, but reservoir temperature ($reservoirTemperature) is below maximum');
-        return new _ThermostatModelStateDescription(new _Cooling(maximum.correct(-marginDelta)), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum');
+        return new _ThermostatModelStateDescription(new _Cooling(maximum.correct(-marginDelta)), 'current temperature $currentTemperature above ${regimeAdjective}maximum $maximum (reservoir temperature $reservoirTemperature is not sufficiently below maximum)');
       } else if (_currentState is _Heating || _currentState is _ForceHeating) {
-        if (currentTemperature < minimum.correct(marginDelta))
+        if (currentTemperature < minimum.correct(marginDelta)) {
+          if (_garageHasFumes)
+            return new _ThermostatModelStateDescription(new _HeatingDisabledDueToFumes(), 'current temperature $currentTemperature; continuing heating until above ${regimeAdjective}$minimum by $marginDelta');
           return new _ThermostatModelStateDescription(new _Heating(minimum.correct(marginDelta)), 'current temperature $currentTemperature; continuing heating until above ${regimeAdjective}$minimum by $marginDelta');
+        }
       } else if (_currentState is _Cooling || _currentState is _ForceCooling) {
         if (currentTemperature > maximum.correct(-marginDelta))
           return new _ThermostatModelStateDescription(new _Cooling(maximum.correct(-marginDelta)), 'current temperature $currentTemperature; continuing cooling until below ${regimeAdjective}$maximum by $marginDelta');
@@ -781,6 +812,11 @@ class ThermostatModel extends Model {
     if (value == null)
       return;
     _currentThermostatTemperature = value;
+    _processData();
+  }
+
+  void _handleRemyGarageHasFumesNotification(bool value) {
+    _garageHasFumes = value;
     _processData();
   }
 
@@ -902,7 +938,7 @@ class ThermostatModel extends Model {
       final String remaining = prettyDuration(lockoutDuration - now.difference(_lockoutStart));
       additional += '; lockout: $_lockout ($remaining remaining)';
     }
-    log('upstairs=${_currentUpstairsTemperature}; downstairs=${_currentDownstairsTemperature} (thermostat=${_currentThermostatTemperature}, uradmonitor=${_currentIndoorAirQualityTemperature}); rack=${_currentRackTemperature}; indoor PM₂.₅: ${_currentIndoorsPM2_5}; regime: $_currentRegime; state: $_currentState$additional');
+    log('upstairs=${_currentUpstairsTemperature}; downstairs=${_currentDownstairsTemperature}; rack=${_currentRackTemperature}; indoor PM₂.₅: ${_currentIndoorsPM2_5}; regime: $_currentRegime; state: $_currentState$additional');
   }
 }
 

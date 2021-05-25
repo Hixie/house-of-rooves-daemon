@@ -19,6 +19,19 @@ abstract class Model {
     }
   }
 
+  bool get muted => _muted;
+  bool _muted = false;
+  set muted(bool value) {
+    if (value == _muted)
+      return;
+    _muted = value;
+    if (muted) {
+      log('sound muted');
+    } else {
+      log('sound enabled');
+    }
+  }
+
   @protected
   void log(String message) {
     if (onLog != null)

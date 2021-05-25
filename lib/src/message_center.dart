@@ -6,6 +6,8 @@ import 'package:home_automation_tools/all.dart';
 
 import 'common.dart';
 
+const bool verbose = false;
+
 abstract class Message {
   Message();
 
@@ -235,6 +237,8 @@ class MessageCenter extends Model {
   Future<Null> _lastInLine = new Future<Null>.value(null);
   // static int _announceCount = 0;
   Future<Null> announce(String message, int level, { bool verbal: true, bool auditoryIcon: true, bool visual: true, Duration duration: const Duration(seconds: 5) }) async {
+    if (verbose)
+      log('announce("$message", level=$level, ${verbal ? 'verbal, ' : ''}${auditoryIcon ? 'audio icon, ' : ''}${visual ? 'visual, ' : ''}for ${prettyDuration(duration)}${ muted ? '; audio muted' : '; audio enabled'})');
     //_announceCount += 1;
     //final int id = _announceCount;
     //log('announce #$id: "$message" (level=$level, ${verbal ? 'verbal, ' : ''}${auditoryIcon ? 'audio icon, ' : ''}${visual ? 'visual, ' : ''}for ${prettyDuration(duration)})');
@@ -253,7 +257,7 @@ class MessageCenter extends Model {
       visualHandle = showMessage(message);
     }
     Future<Null> timeout = new Future<Null>.delayed(duration);
-    if (auditoryIcon) {
+    if (auditoryIcon && !muted) {
       DateTime now = new DateTime.now();
       //log('announce #$id: considering playing audio icon at level $level; last level was $_lastAuditoryIconLevel, ${prettyDuration(now.difference(_lastAuditoryIconTimeStamp))} ago');
       if (_lastAuditoryIconLevel < level || now.difference(_lastAuditoryIconTimeStamp) > const Duration(seconds: 20)) {
@@ -277,7 +281,7 @@ class MessageCenter extends Model {
       //log('announce #$id: canceled (inactive)');
       return;
     }
-    if (verbal) {
+    if (verbal && !muted) {
       //log('announce #$id: speaking message verbally');
       await tts.speak(message).timeout(_verbalTimeout, onTimeout: () => null);
     }
@@ -338,7 +342,8 @@ class MessageCenter extends Model {
   }
 
   void dispose() {
-    log('disposing...');
+    if (verbose)
+      log('disposing...');
     _active = false;
     _updateScheduled = true;
     for (Message message in _messages.toList())

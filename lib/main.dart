@@ -86,11 +86,6 @@ Future<Null> main() async {
       username: credentials.tvUsername,
       password: credentials.tvPassword,
     );
-    MessageCenter messageCenter = new MessageCenter(
-      tv,
-      tts,
-      onLog: (String message) { log('message center', message); },
-    );
     Thermostat thermostat = new Thermostat(
       host: (await InternetAddress.lookup(credentials.thermostatHost)).first,
       username: credentials.thermostatUsername,
@@ -126,6 +121,9 @@ Future<Null> main() async {
       station: new MeasurementStation(siteName: 'outside uRADMonitor', outside: true),
       onLog: (String message) { log('uradmonitor', '(outside) $message'); },
     );
+    DnsMasqMonitor dnsMasqMonitor = new DnsMasqMonitor(
+      onLog: (String message) { log('dnsmasq', message); },
+    );
     // ProcessMonitor leakSensorKitchenSinkMonitor = ProcessMonitor(
     //   executable: '/home/ianh/dev/leak-sensor/leak-sensor-monitor',
     //   onLog: (String message) { log('leak sensor', '(kitchen sink) $message'); },
@@ -147,8 +145,15 @@ Future<Null> main() async {
 
     // MODELS
 
+    MessageCenter messageCenter = new MessageCenter( // (added to models list by reference below)
+      tv,
+      tts,
+      onLog: (String message) { log('message center', message); },
+    );
+
     HouseSensorsModel houseSensors = new HouseSensorsModel( // (added to models list by reference below)
       await cloudbits.getDevice(houseSensorsId),
+      dnsMasqMonitor,
       remy,
       messageCenter,
       tts,
@@ -195,6 +200,7 @@ Future<Null> main() async {
     ));
 
     List<Model> models = <Model>[
+      messageCenter,
       ingestor,
       new LaundryRoomModel(
         remy,
@@ -261,6 +267,18 @@ Future<Null> main() async {
     remy.getStreamForNotification('private-mode').listen((bool state) {
       for (Model model in models)
         model.privateMode = state;
+    });
+
+    remy.getStreamForNotification('muted-mode').listen((bool state) {
+      if (state) {
+        log('system', 'muted!');
+        tts.audioIcon('acknowledge-completed');
+      } else {
+        log('system', 'unmuting!');
+        tts.audioIcon('power-up');
+      }
+      for (Model model in models)
+        model.muted = state;
     });
 
     log('system', 'house of rooves deamon online');
