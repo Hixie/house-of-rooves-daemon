@@ -477,7 +477,6 @@ class ThermostatModel extends Model {
     LogCallback onLog,
   }) : super(onLog: onLog) {
     _subscriptions.add(thermostat.status.listen(_handleThermostatStatus));
-    _subscriptions.add(thermostat.temperature.listen(_handleThermostatTemperature));
     _subscriptions.add(remy.getStreamForNotification('garage-has-fumes').listen(_handleRemyGarageHasFumesNotification));
     _subscriptions.add(remy.getStreamForNotificationWithArgument('thermostat-override').listen(_handleRemyOverride));
     _subscriptions.add(houseSensors.frontDoor.listen(_handleFrontDoor));
@@ -509,8 +508,6 @@ class ThermostatModel extends Model {
   Set<StreamSubscription<dynamic>> _subscriptions = new HashSet<StreamSubscription<dynamic>>();
 
   Temperature _currentRackTemperature;
-  Temperature _currentIndoorAirQualityTemperature;
-  Temperature _currentThermostatTemperature;
   Temperature _currentDownstairsTemperature;
   Temperature _currentUpstairsTemperature;
   Measurement _currentIndoorsPM2_5;
@@ -808,13 +805,6 @@ class ThermostatModel extends Model {
     }
   }
 
-  void _handleThermostatTemperature(Temperature value) {
-    if (value == null)
-      return;
-    _currentThermostatTemperature = value;
-    _processData();
-  }
-
   void _handleRemyGarageHasFumesNotification(bool value) {
     _garageHasFumes = value;
     _processData();
@@ -868,7 +858,6 @@ class ThermostatModel extends Model {
   void _handleIndoorAirQuality(MeasurementPacket value) {
     if (value == null)
       return;
-    _currentIndoorAirQualityTemperature = value.temperature;
     _currentIndoorsPM2_5 = value.pm2_5;
     _processData();
   }
