@@ -15,7 +15,8 @@ import 'database/adaptors.dart';
 // TODO(ianh): need a way to turn to auto-unoccupied mode when we're absent
 
 const double overrideDelta = 0.75; // Celsius degrees for override modes
-const double marginDelta = 0.5; // Celsius degrees for how far to overshoot when heating or cooling
+const double quietDelta = 1.00; // Celsius degrees for quiet mode. 0.75 let it get warm but AC was still more annoying.
+const double marginDelta = 0.45; // Celsius degrees for how far to overshoot when heating or cooling (at 0.5, ian kept looking at the logs as it shut down)
 const double reservoirStartDelta = 2.0; // Celsius degrees for when to consider reservoir (3.0 led to overly hot upstairs; 2.5 led to overly cold downstairs)
 const double reservoirEndDelta = 1.5; // Celsius degrees for when to consider reservoir
 
@@ -34,8 +35,14 @@ const bool verbose = false;
 final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
     'night time',
-    new DayTime(23, 30), new DayTime(05, 30),
-    new TargetTemperature(20.0), new TargetTemperature(23.5),
+    new DayTime(23, 30), new DayTime(00, 30),
+    new TargetTemperature(20.0), new TargetTemperature(23.75), // 23.5 is unnecessarily cold
+    TemperatureSource.upstairs,
+  ),
+  new ThermostatRegime(
+    'dead of night',
+    new DayTime(00, 30), new DayTime(05, 30),
+    new TargetTemperature(20.0), new TargetTemperature(25.0),
     TemperatureSource.upstairs,
   ),
   new ThermostatRegime(
@@ -47,13 +54,14 @@ final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
     'morning',
     new DayTime(06, 30), new DayTime(09, 30),
-    new TargetTemperature(22.5), new TargetTemperature(26.0), // low was 23.5 but that caused heating in summer; 22.0 did not
+    new TargetTemperature(22.25), new TargetTemperature(26.0), // low was 23.5 but that caused heating in summer, as did 22.5; 22.0 did not
     TemperatureSource.upstairs,
   ),
   new ThermostatRegime(
     'day time',
     new DayTime(09, 30), new DayTime(21, 30),
-    new TargetTemperature(22.15), new TargetTemperature(24.0), // ian says 22 too cold, 22.5 too hot, 22.25 borderline too hot when it reaches 22.75
+    new TargetTemperature(22.15), // low: ian says 22 too cold, 22.5 too hot, 22.25 borderline too hot when it reaches 22.75
+    new TargetTemperature(24.0), // high: carey and elaine like 24.0; ian thinks 25.0 is fine
     TemperatureSource.downstairs,
   ),
   new ThermostatRegime(
@@ -682,8 +690,8 @@ class ThermostatModel extends Model {
         case ThermostatOverride.quiet:
           if (minimum == null || maximum == null)
             return new _ThermostatModelStateDescription(new _ForceIdle(), 'no regime selected; quiet override active');
-          minimum = minimum.correct(-overrideDelta);
-          maximum = maximum.correct(overrideDelta);
+          minimum = minimum.correct(-quietDelta);
+          maximum = maximum.correct(quietDelta);
           regimeAdjective = 'quiet $regimeAdjective';
           break;
         default:

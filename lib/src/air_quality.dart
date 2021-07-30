@@ -12,6 +12,7 @@ class AirQualityModel extends Model {
     for (Stream<MeasurementPacket> dataSource in dataSources)
       _subscriptions.add(dataSource.listen(_handler));
     _timeSinceLastReport.start();
+    _timeSinceRemyButtonPush.start();
     log('model initialised');
   }
 
@@ -27,7 +28,9 @@ class AirQualityModel extends Model {
   final Map<MeasurementStation, Map<Metric, Measurement>> _metrics = <MeasurementStation, Map<Metric, Measurement>>{};
   AirQualityParameter _worstParameter;
   Stopwatch _timeSinceLastReport = Stopwatch();
+  Stopwatch _timeSinceRemyButtonPush = Stopwatch();
   Duration _timeBetweenReports = const Duration(minutes: 5); // at the start we give them more often, for debugging
+  Duration _timeBetweenButtonPushes = const Duration(minutes: 90);
   static const Duration _maxTimeBetweenReports = const Duration(minutes: 20);
 
   bool _aqiDiffersSignificantly(AirQualityParameter a, AirQualityParameter b) {
@@ -71,7 +74,8 @@ class AirQualityModel extends Model {
         remy.pushButtonById('airQualityUnknown');
       } else if (_worstParameter == null ||
                  _worstParameter.station != worstParameter.station ||
-                 _aqiDiffersSignificantly(_worstParameter, worstParameter)) {
+                 _aqiDiffersSignificantly(_worstParameter, worstParameter) ||
+                 _timeSinceRemyButtonPush.elapsed > _timeBetweenButtonPushes) {
         _worstParameter = worstParameter;
         log('worst outside air quality measurement is currently ${metricToString(worstParameter.metric)}=$worstParameter at ${worstParameter.station}');
         if (maxAqi < 70.0) {
@@ -94,6 +98,7 @@ class AirQualityModel extends Model {
           // Officially 300+ is "trigger health warnings of emergency conditions".
           remy.pushButtonById('airQualityToxic3');
         }
+        _timeSinceRemyButtonPush.reset();
       }
     }
 
