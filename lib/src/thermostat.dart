@@ -14,7 +14,8 @@ import 'database/adaptors.dart';
 // TODO(ianh): predicted temperature should affect targets (e.g. if it's going to be hot out in the next few hours, don't heat)
 // TODO(ianh): need a way to turn to auto-unoccupied mode when we're absent
 
-const double overrideDelta = 0.75; // Celsius degrees for override modes
+const double overrideDeltaUp = 3.00; // Celsius degrees for override modes (heating) // in winter, 2.00 was not enough to make ian happy at night downstairs
+const double overrideDeltaDown = 0.75; // Celsius degrees for override modes (cooling)
 const double quietDelta = 1.00; // Celsius degrees for quiet mode. 0.75 let it get warm but AC was still more annoying.
 const double marginDelta = 0.45; // Celsius degrees for how far to overshoot when heating or cooling (at 0.5, ian kept looking at the logs as it shut down)
 const double reservoirStartDelta = 2.0; // Celsius degrees for when to consider reservoir (3.0 led to overly hot upstairs; 2.5 led to overly cold downstairs)
@@ -36,7 +37,7 @@ final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
     'night time',
     new DayTime(23, 30), new DayTime(00, 30),
-    new TargetTemperature(20.0), new TargetTemperature(23.75), // 23.5 is unnecessarily cold
+    new TargetTemperature(20.0), new TargetTemperature(24.25), // 23.5 is unnecessarily cold, 23.75 was making ian tense from cold in the summer
     TemperatureSource.upstairs,
   ),
   new ThermostatRegime(
@@ -54,26 +55,27 @@ final List<ThermostatRegime> schedule = <ThermostatRegime>[
   new ThermostatRegime(
     'morning',
     new DayTime(06, 30), new DayTime(09, 30),
-    new TargetTemperature(22.25), new TargetTemperature(26.0), // low was 23.5 but that caused heating in summer, as did 22.5; 22.0 did not
+    new TargetTemperature(22.0), // low was 23.5 but that caused heating in summer, as did 22.5; 22.0 did not, 22.25 sometimes seemed to...
+    new TargetTemperature(26.0),
     TemperatureSource.upstairs,
   ),
   new ThermostatRegime(
     'day time',
     new DayTime(09, 30), new DayTime(21, 30),
-    new TargetTemperature(22.15), // low: ian says 22 too cold, 22.5 too hot, 22.25 borderline too hot when it reaches 22.75
-    new TargetTemperature(24.0), // high: carey and elaine like 24.0; ian thinks 25.0 is fine
+    new TargetTemperature(22.40), // low: ian says 22 too cold, 22.5 too hot, 22.25 borderline too hot when it reaches 22.75, 22.15 too cold when it's cold outside...
+    new TargetTemperature(24.25), // high: carey and elaine like 24.0; ian thinks that's way too cold but 25.0 is fine; except sometimes ian thinks 24.3 is too hot...
     TemperatureSource.downstairs,
   ),
   new ThermostatRegime(
     'evening',
     new DayTime(21, 30), new DayTime(22, 30),
-    new TargetTemperature(22.0), new TargetTemperature(25.5),
+    new TargetTemperature(22.0), new TargetTemperature(25.5), // during the summer the upstairs gets way hotten than this, but we don't want to freeze downstairs while cooling it
     TemperatureSource.upstairs,
   ),
   new ThermostatRegime(
     'late evening',
     new DayTime(22, 30), new DayTime(23, 30),
-    new TargetTemperature(21.0), new TargetTemperature(24.5),
+    new TargetTemperature(21.0), new TargetTemperature(24.5), // ...so we slowly ramp down over the evening
     TemperatureSource.upstairs,
   ),
 ];
@@ -444,7 +446,7 @@ class DayTime {
 
 class ThermostatRegime {
   ThermostatRegime(this.description, this.start, this.end, this.minimum, this.maximum, this.source) {
-    assert(minimum.correct(overrideDelta) < maximum);
+    assert(minimum < maximum);
   }
   final DayTime start;
   final DayTime end;
@@ -629,7 +631,6 @@ class ThermostatModel extends Model {
           break;
       }
     }
-    bool ignoreLockouts = false;
     if (_currentThermostatOverride != null) {
       if (_temperatureAtOverrideTime == null)
         _temperatureAtOverrideTime = currentTemperature;
@@ -638,8 +639,8 @@ class ThermostatModel extends Model {
       switch (_currentThermostatOverride) {
         case ThermostatOverride.heating:
           if ((currentTemperature != null && _temperatureAtOverrideTime != null &&
-               currentTemperature > _temperatureAtOverrideTime.correct(overrideDelta))) {
-            log('achieved requested temperature increase (now at $currentTemperature, above ${_temperatureAtOverrideTime.correct(overrideDelta)}); canceling override.');
+               currentTemperature > _temperatureAtOverrideTime.correct(overrideDeltaUp))) {
+            log('achieved requested temperature increase (now at $currentTemperature, above ${_temperatureAtOverrideTime.correct(overrideDeltaUp)}); canceling override.');
             _disableOverride();
           } else if (regime != _regimeAtOverrideTime) {
             log('entered new thermostat regime since override request; canceling override.');
@@ -650,21 +651,20 @@ class ThermostatModel extends Model {
             return new _ThermostatModelStateDescription(new _ForceHeating(), 'no temperature available; heating override selected');
           } else {
             if (_temperatureAtOverrideTime != null) {
-              minimum = _temperatureAtOverrideTime.correct(overrideDelta);
+              minimum = _temperatureAtOverrideTime.correct(overrideDeltaUp);
               if (maximum < minimum)
-                maximum = minimum.correct(overrideDelta);
+                maximum = minimum.correct(overrideDeltaUp);
               regimeAdjective = 'override ';
             } else {
-              minimum = minimum.correct(overrideDelta);
+              minimum = minimum.correct(overrideDeltaUp);
               regimeAdjective = 'overridden $regimeAdjective';
             }
-            //ignoreLockouts = true;
           }
           break;
         case ThermostatOverride.cooling:
           if ((currentTemperature != null && _temperatureAtOverrideTime != null &&
-               currentTemperature < _temperatureAtOverrideTime.correct(-overrideDelta))) {
-            log('achieved requested temperature decrease (now at $currentTemperature, below ${_temperatureAtOverrideTime.correct(-overrideDelta)}); canceling override.');
+               currentTemperature < _temperatureAtOverrideTime.correct(-overrideDeltaDown))) {
+            log('achieved requested temperature decrease (now at $currentTemperature, below ${_temperatureAtOverrideTime.correct(-overrideDeltaDown)}); canceling override.');
             _disableOverride();
           } else if (regime != _regimeAtOverrideTime) {
             log('entered new thermostat regime since override request; canceling override.');
@@ -673,15 +673,14 @@ class ThermostatModel extends Model {
             return new _ThermostatModelStateDescription(new _ForceCooling(), 'no temperature available; cooling override selected');
           } else {
             if (_temperatureAtOverrideTime != null) {
-              maximum = _temperatureAtOverrideTime.correct(-overrideDelta);
+              maximum = _temperatureAtOverrideTime.correct(-overrideDeltaDown);
               if (minimum > maximum)
-                minimum = maximum.correct(-overrideDelta);
+                minimum = maximum.correct(-overrideDeltaDown);
               regimeAdjective = 'override ';
             } else {
-              maximum = maximum.correct(-overrideDelta);
+              maximum = maximum.correct(-overrideDeltaDown);
               regimeAdjective = 'overridden $regimeAdjective';
             }
-            //ignoreLockouts = true;
           }
           break;
         case ThermostatOverride.fan:
@@ -698,20 +697,18 @@ class ThermostatModel extends Model {
           assert(false);
       }
     }
-    if (!ignoreLockouts) {
-      if (_lockedOut(ThermostatLockoutOperation.heating)) {
-        minimum = minimum == null ? new TargetTemperature(18.0) : minimum.correct(-10.0);
-        regimeAdjective = '$regimeAdjective(heating locked out) ';
-      }
-      if (_lockedOut(ThermostatLockoutOperation.cooling)) {
-        maximum = maximum == null ? new TargetTemperature(32.0) : maximum.correct(10.0);
-        regimeAdjective = '$regimeAdjective(cooling locked out) ';
-      }
+    if (_lockedOut(ThermostatLockoutOperation.heating)) {
+      minimum = minimum == null ? new TargetTemperature(18.0) : minimum.correct(-10.0);
+      regimeAdjective = '$regimeAdjective(heating locked out) ';
+    }
+    if (_lockedOut(ThermostatLockoutOperation.cooling)) {
+      maximum = maximum == null ? new TargetTemperature(32.0) : maximum.correct(10.0);
+      regimeAdjective = '$regimeAdjective(cooling locked out) ';
     }
     if (verbose)
-      log('minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; reservoirTemperature: $reservoirTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
+      log('minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; reservoirTemperature: $reservoirTemperature; lockout: $_lockout');
     if (minimum != null && maximum != null && currentTemperature != null && reservoirTemperature != null) {
-      assert(minimum < maximum, 'regime out of range: minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; ${ignoreLockouts ? "ignoring lockouts" : "lockout: $_lockout"}');
+      assert(minimum < maximum, 'regime out of range: minimum temperature: $minimum; maximum temperature: $maximum; current temperature: $currentTemperature; lockout: $_lockout');
       if (currentTemperature < minimum) {
         if (reservoirTemperature > minimum.correct(reservoirStartDelta) && _currentState is! _Heating)
           return new _ThermostatModelStateDescription(_ReservoirFan(reservoirWarmer: true), 'current temperature $currentTemperature below ${regimeAdjective}minimum $minimum, but reservoir temperature ($reservoirTemperature) is above minimum');
