@@ -34,7 +34,7 @@ class RemyMessagesModel extends Model {
     String label;
     switch (notification.escalationLevel) {
       case 9:
-        label = 'Alert! Alert! ${notification.label} Alert! Alert! ${notification.label}';
+        label = 'Alert! Alert! ${notification.label}!!! Alert! Alert! ${notification.label}!!!';
         break;
       case 8:
       case 7:
